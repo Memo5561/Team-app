@@ -7,7 +7,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import teampanel from './config/eslint-plugin-teampanel.js';
-import { architectureConfig, i18nConfig, securityConfig } from './config/eslint-rules.js';
+import { architectureConfig, i18nConfig, restrictedSyntaxConfigs } from './config/eslint-rules.js';
 
 export default defineConfig(
   globalIgnores([
@@ -65,5 +65,5 @@ export default defineConfig(
   },
   architectureConfig(teampanel),
   i18nConfig(i18next),
-  securityConfig,
+  ...restrictedSyntaxConfigs,
 );

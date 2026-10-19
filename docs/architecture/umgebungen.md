@@ -72,7 +72,8 @@ Production und Branch-Schutz beziehen sich auf diesen Branch.
    - `SUPABASE_ACCESS_TOKEN`: persönlicher Token von supabase.com → *Account → Access Tokens*
    - `SUPABASE_DB_PASSWORD`: Datenbank-Passwort des jeweiligen Projekts
    - `SUPABASE_PROJECT_REF`: Project Ref des jeweiligen Projekts
-4. Optional *Settings → Branches*: Branch-Schutz für `main` mit den CI-Jobs als Pflicht-Checks.
+4. *Settings → Branches* (empfohlen): Branch-Schutz für `main` mit den vier CI-Jobs als Pflicht-Checks. Der
+   Deploy-Workflow prüft zusätzlich selbst, dass CI für den Commit grün ist.
 
 Migrationen werden **nur** über den manuellen Workflow *Actions → Deploy database* eingespielt, und nur vom
 Default-Branch. Er führt die DB-Tests auf dem Commit erneut aus und zeigt die ausstehenden Migrationen

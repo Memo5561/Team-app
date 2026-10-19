@@ -1,6 +1,6 @@
 # Applies supabase/migrations to staging or production. Manual only, never automatic, and only
-# from the default branch. Order: re-run DB tests → dry-run (visible in the job summary) →
-# apply. For production the apply job waits for approval (environment protection rules), so the
+# from the default branch with green CI. Order: CI check + DB tests → dry-run (visible in the job
+# summary) → apply. For production the apply job waits for approval (environment protection rules), so the
 # reviewer sees the dry-run first. Setup: docs/architecture/umgebungen.md §2.2
 name: Deploy database
 
@@ -15,6 +15,12 @@ on:
 
 permissions:
   contents: read
+  actions: read
+
+# bash -eo pipefail: a failing command inside a pipe (e.g. `… | tee`) fails the step.
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: deploy-database-${{ inputs.environment }}
@@ -27,6 +33,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: CI is green for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
+          if [[ "$conclusion" != "success" ]]; then
+            echo "::error::CI for $GITHUB_SHA is '${conclusion:-missing}', not 'success'. Deploy only green commits."
+            exit 1
+          fi
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -65,7 +81,7 @@ jobs:
           {
             echo "## Pending migrations (${{ inputs.environment }})"
             echo '```'
-            pnpm exec supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD"
+            pnpm exec supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" 2>&1
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 

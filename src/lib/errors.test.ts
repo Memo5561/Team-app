@@ -30,6 +30,13 @@ describe('getErrorMessageKey', () => {
       'functions-js fetch error',
       Object.assign(new Error('Failed to send a request'), { name: 'FunctionsFetchError' }),
     ],
+    [
+      'storage-js unknown error wrapping a fetch failure',
+      Object.assign(new Error('Failed to fetch'), {
+        name: 'StorageUnknownError',
+        originalError: new TypeError('Failed to fetch'),
+      }),
+    ],
   ])('maps a %s to the network message', (_shape, error) => {
     expect(getErrorMessageKey(error)).toBe('errors.network');
   });

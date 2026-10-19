@@ -312,8 +312,9 @@ jeden Importpfad inklusive `import()` und `import.meta.glob` auflöst):
 | **staging** | eigenes Supabase-Projekt (EU) | Cloudflare Pages Preview/Branch | Test-Mode | Resend, Test-Domain |
 | **production** | eigenes Supabase-Projekt (EU, Pro-Plan) | Cloudflare Pages Production | Live-Mode | Resend, Prod-Domain |
 
-- **Migrationen** nur über `supabase/migrations/*.sql` (§76). Deployment auf staging/production ausschließlich durch
-  CI (`supabase db push`) nach grünen Tests. Keine manuellen Änderungen in Produktion.
+- **Migrationen** nur über `supabase/migrations/*.sql` (§76). Deployment auf staging/production ausschließlich über den
+  manuellen Workflow *Deploy database*: nur vom Default-Branch, nur bei grüner CI des Commits, Dry-Run vor Apply,
+  Production mit Freigabe. Keine manuellen Änderungen in Produktion.
 - **CI (GitHub Actions)** bei jedem Push, vier parallele Jobs: `quality` (Format, Lint, Typecheck, Unit-Tests),
   `database` (`supabase start` → pgTAP → Typ-Drift-Check), `e2e` (Playwright Desktop + Mobile), `security` (gitleaks
   über die gesamte Historie, `pnpm audit`, Bundle-Scan). Ab Phase 1 kommen Integrationstests dazu. Details:

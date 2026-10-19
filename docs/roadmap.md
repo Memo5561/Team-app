@@ -46,22 +46,30 @@ und UI hinzufügen kann. **Keine Businesslogik.**
   (Playwright, mit DOM-Typen): `strict`, `noUncheckedIndexedAccess`, `noUnused*`, `verbatimModuleSyntax`,
   `erasableSyntaxOnly`, Alias `@/`.
 - ESLint 9 (Flat Config): `typescript-eslint` strict- + stylistic-type-checked, `react-hooks`, `react-refresh`,
-  `jsx-a11y` (strict), Security-Regeln (`dangerouslySetInnerHTML`, `innerHTML`/`outerHTML`/`srcdoc`,
-  `insertAdjacentHTML`, `document.write`, `eval`).
-- **Architekturregel `teampanel/layers`** (`config/eslint-plugin-teampanel.js`): löst jeden Importpfad auf, auch
-  `./../`, `@/x/../y`, `export … from`, dynamisches `import()` und `import.meta.glob`, und prüft die Schichten
-  app → modules → platform → components → lib. Feature-Module dürfen sich nicht gegenseitig importieren. `..` in
-  Pfaden ist verboten (immer `@/`), dynamische Importe brauchen literale Pfade.
-- **i18n-Regel** prüft JSX-Text, Template-Literale und **alle** Attribute außer einer Liste technischer Attribute.
-  Neue Text-Props sind damit automatisch abgedeckt.
+  `jsx-a11y` (strict), Security-Regeln (`dangerouslySetInnerHTML`, `srcDoc`, `innerHTML`/`outerHTML`/`srcdoc`,
+  `setAttribute('srcdoc'|'on…')`, `insertAdjacentHTML` u. a., `document.write`, `eval`) und eine
+  Design-Token-Regel gegen Palette-Klassen (`bg-red-500`, `text-white` …) und Arbitrary-Farben (`bg-[#…]`).
+- **Architekturregel `teampanel/layers`** (`config/eslint-plugin-teampanel.js`):
+  - löst jeden Importpfad auf, auch `./../`, `@/x/../y`, `export … from`, dynamisches `import()` und
+    `import.meta.glob` inkl. `base`-Option
+  - prüft die Schichten app → modules → platform → components → lib; Feature-Module importieren sich nie gegenseitig
+  - `src/test`-Helfer nur aus `*.test.*`-Dateien
+  - unbekannte `src`-Ordner sind gesperrt (fail-closed)
+  - `..` in Pfaden ist verboten (immer `@/`), dynamische Importe brauchen literale Pfade
+  - funktioniert unabhängig vom Arbeitsverzeichnis
+- **i18n-Regeln**: JSX-Text, Template-Literale und alle Props eigener Komponenten außer einer Liste technischer
+  Props (Handler, Werte, IDs); neue Text-Props sind damit automatisch abgedeckt. Auf nativen HTML/SVG-Elementen
+  werden die sichtbaren Attribute geprüft (`title`, `alt`, `placeholder`, `label`, `aria-label/-description/
+  -roledescription/-valuetext/-placeholder`, Button-`value`).
 - Die eigenen Regeln sind getestet (`tests/lint/`): isoliert und über die echte `eslint.config.js`.
 - Prettier (+ Tailwind-Klassensortierung). Markdown ist ausgenommen, die Doku ist von Hand formatiert.
 
 ### 0.2 Frontend-Gerüst
 - Tailwind CSS 4 + shadcn/ui (`components.json`, `Button` als Referenz; Standardhöhe 44 px für Touch, §45; sichtbarer
   Fokusring auch im Forced-Colors-Modus).
-- **Design Tokens** in `src/styles/tokens.css`. Die Tailwind-Standardpalette ist entfernt (`--color-*: initial`),
-  daher existieren nur semantische Farben. Systemschrift ohne externes Font-CDN. Dark-Mode-Werte vorbereitet, aber
+- **Design Tokens** in `src/styles/tokens.css` (inkl. `--overlay` für Dialog-Hintergründe). Die
+  Tailwind-Standardpalette ist entfernt (`--color-*: initial`), und die Design-Token-Lint-Regel meldet Palette- und
+  Arbitrary-Farben. Systemschrift ohne externes Font-CDN. Dark-Mode-Werte vorbereitet, aber
   nicht aktiv.
 - React Router 8 (`/` Platzhalter, `*` 404, Error-Element); Seitentitel pro Seite, Fokus wandert nach Navigation auf
   die neue Überschrift. TanStack Query (staleTime 30 s + Refetch bei Fensterfokus; Polling pro Query über
@@ -72,7 +80,8 @@ und UI hinzufügen kann. **Keine Businesslogik.**
   service_role-Keys ausdrücklich. In Staging und Production ist `https` Pflicht. Geprüft wird beim Build (der Build
   bricht ab) und beim App-Start (Konfigurationsfehlerseite). Die App liest nur diese drei Variablen.
 - `src/lib/supabase.ts` (nur Publishable Key, PKCE) und `src/lib/errors.ts`: SQLSTATE-, PostgREST- und `TP…`-Codes
-  werden zu i18n-Keys; Netzwerkfehler werden in allen supabase-js-Formen und Browser-Varianten erkannt.
+  werden zu i18n-Keys. Netzwerkfehler werden erkannt in postgrest-, auth-, functions- und storage-js sowie in den
+  Browser-Varianten (Chrome, Firefox, Safari) und offline.
 - Code-Splitting: `vendor-react` und `vendor` (entries-aware) als langlebige Chunks.
 - Dev-Server und Preview binden fest an `127.0.0.1`.
 - Sentry ist auf „vor Pilot“ verschoben, um in Phase 0 keine ungenutzte Abhängigkeit einzubauen.
@@ -82,10 +91,10 @@ und UI hinzufügen kann. **Keine Businesslogik.**
   `auto_expose_new_tables = false`, lokale Redirect-URLs.
 - Migration `20261019150258_baseline.sql`: `btree_gist` im Schema `extensions` (bewusst **kein `citext`**, E-38);
   Schema `private` (nicht exponiert). **Default Privileges**: Neue Tabellen, Sequenzen und Funktionen in `public`
-  gewähren `anon`/`authenticated` nichts, `service_role` bekommt explizit Zugriff, Funktionen sind für `PUBLIC`
-  nicht ausführbar. Dazu `private.set_updated_at()`.
-- `supabase/tests/database/000_guardrails.test.sql` (21 pgTAP-Assertions), die automatisch für **jede künftige**
-  Migration gelten:
+  gewähren `anon`/`authenticated` nichts; `service_role` bekommt explizit Tabellen-, Sequenz- und
+  Ausführungsrechte; Funktionen sind für `PUBLIC` nicht ausführbar. Dazu `private.set_updated_at()`.
+- `supabase/tests/database/000_guardrails.test.sql` (22 pgTAP-Assertions, Rechte ACL-basiert inkl. PG17
+  `MAINTAIN`), die automatisch für **jede künftige** Migration gelten:
   - RLS auf allen Tabellen; keine Policies für `anon`/`public`; keine `FOR ALL`-Policies
   - Views nur mit `security_invoker`
   - `anon` ohne Tabellen-, Spalten-, Sequenz- und Funktionsrechte; `authenticated` ohne
@@ -97,15 +106,19 @@ und UI hinzufügen kann. **Keine Businesslogik.**
 - `src/types/database.ts` mit der gepinnten CLI 2.121 generiert (`pnpm db:types`, ohne Docker
   `pnpm db:types:local`). Die Ausgabe ist identisch mit der CI-Generierung. Ein CLI-Update erfordert neues
   Generieren.
-- `pnpm db:test:local`: Ersatz-Testlauf ohne Docker (Wegwerf-PostgreSQL + Supabase-Shim mit `supabase_admin` als
-  Superuser und `postgres` ohne Superuser-Rechte; Plan-Prüfung; transaktionale Migrationen). Maßgeblich bleibt CI.
+- `pnpm db:test:local`: Ersatz-Testlauf ohne Docker. Der Wegwerf-PostgreSQL-Cluster bildet das Image nach:
+  - `supabase_admin` als Superuser, `postgres` ohne Superuser-Rechte, aber mit vollen Rechten auf `auth.users`
+  - realistisches `auth.users`/`auth.identities`, pgcrypto
+  - CLI-Overlay für `auto_expose_new_tables = false`
+  Dazu Plan-Prüfung, transaktionale Migrationen und Unix-Socket statt TCP. Maßgeblich bleibt CI.
 
 ### 0.4 Tests
-- Vitest + React Testing Library (70 Tests):
-  - Routing inkl. Fokus nach Navigation, Konfigurationsfehlerseite
+- Vitest + React Testing Library (94 Tests):
+  - Routing inkl. Fokus nach Navigation (auch unter StrictMode), Konfigurationsfehlerseite
   - Env-Schema (Allowlist, Secret-Keys), Fehler-Mapping (reale supabase-js-Fehlerformen)
   - Security-Header
-  - Lint-Regeln: Architektur-Umgehungen, i18n, Security, echte Konfiguration
+  - Lint-Regeln: Architektur-Umgehungen, i18n (inkl. ausbleibender False Positives), Design Tokens, Security,
+    echte Konfiguration (auch aus anderem Arbeitsverzeichnis)
 - Playwright: Smoke-Tests auf **Desktop und Mobile** (Pixel 7). `vite preview` liefert dieselben Security-Header wie
   das Deployment, und die Tests schlagen bei **CSP-Verstößen**, Konsolenfehlern und Touch-Zielen unter 44 px fehl.
 - pgTAP: Guardrails (siehe 0.3).
@@ -120,7 +133,8 @@ und UI hinzufügen kann. **Keine Businesslogik.**
 | `e2e` | Playwright (Desktop + Mobile), Report als Artefakt bei Fehlern |
 | `security` | gitleaks-CLI über die **gesamte** Git-Historie (`go install`, per Go-Checksum-DB verifiziert), `pnpm audit --prod --audit-level high` (blockierend), Build + Bundle-Scan auf Secrets |
 
-`deploy-database.yml` läuft nur manuell und nur vom Default-Branch: DB-Tests → Dry-Run (Job-Summary) → Apply.
+`deploy-database.yml` läuft nur manuell, nur vom Default-Branch und nur für Commits mit grüner CI:
+CI-Prüfung + DB-Tests → Dry-Run (Job-Summary, scheitert sichtbar) → Apply.
 Production wird erst nach Freigabe angewendet, und der Freigebende sieht vorher den Dry-Run. Secrets stehen nur in den
 Schritten, die sie brauchen. Dazu kommen `dependabot.yml` (npm gruppiert, `@types/node` nur mit Node-Major,
 Actions gruppiert) und eine PR-Vorlage mit Definition-of-Done-Checkliste (§75).
@@ -134,10 +148,14 @@ Actions gruppiert) und eine PR-Vorlage mit Definition-of-Done-Checkliste (§75).
   selbst (Vorschlag im Phase-0-Bericht).
 
 ### 0.7 Review
-Ein Review mit vier Reviewern und adversarialer Gegenprüfung über DB/Security, CI/CD, Frontend und Doku ergab
-48 bestätigte Befunde. Darunter waren 2 CI-Blocker: Host-Bindung `localhost` vs. `127.0.0.1` und abweichende
-Formatierung der generierten Typen. Alle Befunde mit Code-Bezug sind behoben. Was Konten des Product Owners braucht,
-ist unten als offen markiert.
+Zwei Review-Runden mit adversarialer Gegenprüfung über DB/Security, CI/CD, Frontend und Doku:
+- **Runde 1:** 48 bestätigte Befunde, darunter 2 CI-Blocker (Host-Bindung `localhost` vs. `127.0.0.1`, Formatierung
+  der generierten Typen).
+- **Runde 2** (über die Fixes): 19 weitere Punkte, vor allem Lücken der neuen Lint-Regeln, Shim-Abweichungen und die
+  Pipe-Exit-Codes im Deploy.
+
+Alle Befunde mit Code-Bezug sind behoben. Bewusst verschoben ist nur das SHA-Pinning der Actions (Phase 15). Was
+Konten des Product Owners braucht, ist unten als offen markiert.
 
 ### Abnahmekriterien Phase 0
 - [x] `pnpm check` lokal grün; `pnpm e2e` grün; DB-Guardrails grün (`pnpm db:test:local`).

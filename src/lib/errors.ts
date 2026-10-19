@@ -38,10 +38,14 @@ const FETCH_FAILURE_MESSAGE = /failed to fetch|networkerror|network request fail
  * Detects connectivity failures in the shapes supabase-js actually produces:
  * - raw fetch TypeError (any browser),
  * - postgrest-js result error `{ message: 'TypeError: Failed to fetch', code: '' }` (status 0),
- * - auth-js `AuthRetryableFetchError` / functions-js `FunctionsFetchError`.
+ * - auth-js `AuthRetryableFetchError`, functions-js `FunctionsFetchError`,
+ * - storage-js `StorageUnknownError` wrapping a fetch failure.
  */
 function isNetworkError(error: unknown): boolean {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  // `navigator.onLine` is undefined outside browsers (e.g. Node), so compare explicitly.
+  const online =
+    typeof navigator === 'undefined' ? undefined : (navigator as Partial<Navigator>).onLine;
+  if (online === false) return true;
   if (error instanceof TypeError) return FETCH_FAILURE_MESSAGE.test(error.message);
   if (typeof error !== 'object' || error === null) return false;
 
@@ -49,6 +53,14 @@ function isNetworkError(error: unknown): boolean {
   if (name === 'AuthRetryableFetchError' || name === 'FunctionsFetchError') return true;
 
   const message = 'message' in error ? error.message : undefined;
+  if (name === 'StorageUnknownError') {
+    const cause = 'originalError' in error ? error.originalError : undefined;
+    return (
+      (cause instanceof TypeError && FETCH_FAILURE_MESSAGE.test(cause.message)) ||
+      (typeof message === 'string' && FETCH_FAILURE_MESSAGE.test(message))
+    );
+  }
+
   const code = 'code' in error ? error.code : undefined;
   return (
     (code === '' || code === undefined) &&

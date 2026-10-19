@@ -29,7 +29,7 @@ Modulares Team-Management-SaaS für KMU (AT/EU). Responsive Web-App/PWA. **Keine
 - Keine Rohfehler an Nutzer; Fehlercodes über `src/lib/errors.ts` mappen.
 - Keine Secrets im Repo; Service-Role-Key nie im Frontend.
 - DB-Änderungen nur per Migration in `supabase/migrations/`; jede neue Mandantentabelle bekommt pgTAP-Isolationstests.
-- Schichten: app → modules → platform → components → lib. Feature-Module (`src/modules/*`) importieren nie andere Module; Module verdrahtet nur `src/modules/registry.ts` bzw. `src/app`. Imports außerhalb des eigenen Ordners immer über `@/`. ESLint-Regel `teampanel/layers` erzwingt das inkl. `import()`.
+- Schichten: app → modules → platform → components → lib. Feature-Module (`src/modules/*`) importieren nie andere Module; Module verdrahtet nur `src/modules/registry.ts` bzw. `src/app`. Imports außerhalb des eigenen Ordners immer über `@/`. ESLint-Regel `teampanel/layers` erzwingt das inkl. `import()`/`import.meta.glob`. Neue Top-Level-Ordner unter `src/` brauchen erst einen Eintrag in `config/eslint-plugin-teampanel.js`; `src/test` ist nur für `*.test.*`-Dateien.
 - Neue Tabellen müssen die Guardrails in `supabase/tests/database/000_guardrails.test.sql` bestehen: RLS an; Grants an `authenticated` explizit (Default: keine); keine `FOR ALL`-Policies; `unique (organization_id, id)`; Views mit `security_invoker`; Definer-Funktionen mit `search_path = ''`.
 - E-Mail-Spalten: `text` mit `lower(btrim())`-Normalisierung, kein `citext` (E-38).
 

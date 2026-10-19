@@ -5,7 +5,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(21);
+select plan(22);
 
 -- ---------------------------------------------------------------------------
 -- Structural rules for everything in the exposed `public` schema
@@ -45,15 +45,19 @@ select is_empty(
   'every view in public runs with security_invoker (RLS of the caller applies)'
 );
 
+-- ACL-based (aclexplode) so every privilege type counts, including PG17's MAINTAIN.
+-- Grantee 0 is PUBLIC, which includes anon.
 select is_empty(
   $$ select c.relname::text
        from pg_catalog.pg_class c
        join pg_catalog.pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')
-        and (pg_catalog.has_table_privilege('anon', c.oid,
-               'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
-             or pg_catalog.has_any_column_privilege('anon', c.oid,
-               'SELECT, INSERT, UPDATE, REFERENCES')) $$,
+        and (exists (select 1 from pg_catalog.aclexplode(coalesce(c.relacl, pg_catalog.acldefault('r', c.relowner))) a
+                      where a.grantee in (0, 'anon'::regrole))
+             or exists (select 1 from pg_catalog.pg_attribute att,
+                               pg_catalog.aclexplode(att.attacl) a
+                         where att.attrelid = c.oid and att.attacl is not null
+                           and a.grantee in (0, 'anon'::regrole))) $$,
   'anon holds no table- or column-level privileges on any table or view in public'
 );
 
@@ -61,11 +65,9 @@ select is_empty(
   $$ select c.relname::text
        from pg_catalog.pg_class c
        join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public'
-        -- CASE guards evaluation order: the planner may test the privilege before the relkind filter.
-        and case when c.relkind = 'S'
-                 then pg_catalog.has_sequence_privilege('anon', c.oid, 'USAGE, SELECT, UPDATE')
-                 else false end $$,
+      where n.nspname = 'public' and c.relkind = 'S'
+        and exists (select 1 from pg_catalog.aclexplode(coalesce(c.relacl, pg_catalog.acldefault('s', c.relowner))) a
+                     where a.grantee in (0, 'anon'::regrole)) $$,
   'anon holds no privileges on any sequence in public'
 );
 
@@ -88,12 +90,14 @@ select is_empty(
 );
 
 select is_empty(
-  $$ select c.relname::text
+  $$ select c.relname || ':' || a.privilege_type
        from pg_catalog.pg_class c
-       join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+       join pg_catalog.pg_namespace n on n.oid = c.relnamespace,
+            pg_catalog.aclexplode(coalesce(c.relacl, pg_catalog.acldefault('r', c.relowner))) a
       where n.nspname = 'public' and c.relkind in ('r', 'p')
-        and pg_catalog.has_table_privilege('authenticated', c.oid, 'TRUNCATE, REFERENCES, TRIGGER') $$,
-  'authenticated never holds TRUNCATE, REFERENCES or TRIGGER on tables in public'
+        and a.grantee in (0, 'authenticated'::regrole)
+        and a.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN') $$,
+  'authenticated never holds TRUNCATE, REFERENCES, TRIGGER or MAINTAIN on tables in public'
 );
 
 -- ---------------------------------------------------------------------------
@@ -191,6 +195,10 @@ select ok(
 select ok(
   not pg_catalog.has_function_privilege('authenticated', 'public.__guardrail_probe_fn()', 'EXECUTE'),
   'new functions are not executable by authenticated by default'
+);
+select ok(
+  pg_catalog.has_function_privilege('service_role', 'public.__guardrail_probe_fn()', 'EXECUTE'),
+  'new functions are executable by service_role (Edge Functions) by default'
 );
 
 select * from finish();

@@ -41,8 +41,14 @@ trap cleanup EXIT
 
 # Like the Supabase image: the bootstrap superuser is supabase_admin, `postgres` is not a superuser.
 as_server_user "$PG_BIN/initdb" -D "$WORK/data" -U supabase_admin --auth=trust --no-sync -E UTF8 >/dev/null
-as_server_user "$PG_BIN/pg_ctl" -D "$WORK/data" -l "$WORK/postgres.log" -w \
-  -o "-k $WORK -p $PORT -c listen_addresses=127.0.0.1" start >/dev/null
+# Tests use a private Unix socket only; TCP on 127.0.0.1 is needed solely for the CLI type generator.
+LISTEN="''"
+if [[ "$MODE" == "types" ]]; then LISTEN="127.0.0.1"; fi
+if ! as_server_user "$PG_BIN/pg_ctl" -D "$WORK/data" -l "$WORK/postgres.log" -w \
+  -o "-k $WORK -p $PORT -c listen_addresses=$LISTEN" start >/dev/null; then
+  cat "$WORK/postgres.log" >&2
+  exit 1
+fi
 
 psql_as() {
   local role="$1"

@@ -33,6 +33,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
   --color-brand: var(--brand);
 
   --radius-sm: calc(var(--radius) - 4px);
