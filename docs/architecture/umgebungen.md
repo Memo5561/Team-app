@@ -125,9 +125,9 @@ Eine `_redirects`-Datei ist nicht nötig: Ohne `404.html` behandelt Cloudflare P
 | Was | Stand |
 |---|---|
 | GitHub | `main` Default + geschützt; Environment `staging` (nur `main`) mit 3 Secrets |
-| Supabase Staging | Projekt `teampanel-staging`, Ref `pwhvfshrqkrjmfbduesb`, Region **eu-west-1 (Irland)** (E-41), Free-Plan; E-Mail-Auth-Einstellungen gesetzt; Site-URL soll `https://teampanel-8i0.pages.dev` sein (Auth → URL Configuration) |
+| Supabase Staging | Projekt `teampanel-staging`, Ref `pwhvfshrqkrjmfbduesb`, Region **eu-west-1 (Irland)** (E-41), Free-Plan; E-Mail-Auth-Einstellungen gesetzt; Site-URL `https://teampanel-8i0.pages.dev`, Redirect-URLs `https://teampanel-8i0.pages.dev/**` und `https://*.teampanel-8i0.pages.dev/**`; Baseline-Migration per *Deploy database* eingespielt (Run #2), Security Advisor ohne Befund |
 | Supabase Production | noch nicht angelegt (vor dem Pilot, Region Frankfurt) |
-| Cloudflare Pages | Projekt `teampanel`, Adresse `https://teampanel-8i0.pages.dev`; `main` baut vorerst **gegen Staging** (E-42) |
+| Cloudflare Pages | Projekt `teampanel`, Adresse `https://teampanel-8i0.pages.dev`; `main` baut vorerst **gegen Staging** (E-42); securityheaders.com: **A+** |
 | Access Token | `github-actions-teampanel-v2`, nur `teampanel-staging`, läuft am 2027-10-18 ab |
 | Offen | Production-Projekt + Environments `production-plan`/`production`; DPA mit Supabase/Cloudflare (E-17) |
 

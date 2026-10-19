@@ -1,6 +1,6 @@
 # TeamPanel – Implementierungsplan V1
 
-> Status: **Freigegeben am 2026-10-19**, Phase 0 umgesetzt · Basis: §70/§71 der [Spezifikation](product/spezifikation.md), angepasst gemäß
+> Status: **Freigegeben am 2026-10-19**, Phase 0 abgeschlossen · Basis: §70/§71 der [Spezifikation](product/spezifikation.md), angepasst gemäß
 > [E-26](architecture/entscheidungen-und-risiken.md#e-26--phasenreihenfolge-der-spec-hat-lücken).
 >
 > Jede Phase folgt dem Ablauf aus §90 (Analyse → Plan → Datenmodell/Permissions → Tests definieren → Implementieren →
@@ -33,8 +33,7 @@
 
 ## Phase 0 – Repository-Fundament
 
-**Status: umgesetzt und überprüft.** Offen ist nur noch Staging (braucht Konten des Product Owners, siehe
-Abnahmekriterien). Ziel: ein leeres, aber produktionsreifes Gerüst, damit jede spätere Phase sofort Migrationen, Tests
+**Status: abgeschlossen (2026-10-19).** Alle Abnahmekriterien erfüllt, Staging läuft. Ziel: ein leeres, aber produktionsreifes Gerüst, damit jede spätere Phase sofort Migrationen, Tests
 und UI hinzufügen kann. **Keine Businesslogik.**
 
 ### 0.1 Toolchain
@@ -167,9 +166,10 @@ Konten des Product Owners braucht, ist unten als offen markiert.
 - [x] Fehlendes `VITE_SUPABASE_URL` → Build bricht mit `VITE_SUPABASE_URL is missing (see .env.example)` ab;
       zur Laufzeit erscheint die Konfigurationsfehlerseite.
 - [x] Keine Secrets im Repo (gitleaks über Arbeitsbaum und Historie, lokal und in CI).
-- [ ] **Staging eingerichtet** (§71): Supabase-Projekt, Cloudflare Preview, GitHub-Environments, Default-Branch
-      `main`. Braucht die Konten des Product Owners ([Umgebungen §2](architecture/umgebungen.md)).
-      Danach einmal *Deploy database → staging* ausführen.
+- [x] **Staging eingerichtet** (§71): Supabase-Projekt `teampanel-staging`, Cloudflare Pages
+      (`https://teampanel-8i0.pages.dev`, securityheaders.com A+), GitHub-Environment `staging`, Default-Branch
+      `main` mit Schutz. *Deploy database → staging* erfolgreich (Run #2), Baseline in der Staging-DB verifiziert
+      ([Umgebungen §3](architecture/umgebungen.md#3-aktueller-stand-2026-10-19)).
 
 ---
 
