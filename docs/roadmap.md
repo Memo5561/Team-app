@@ -143,9 +143,8 @@ Actions gruppiert) und eine PR-Vorlage mit Definition-of-Done-Checkliste (§75).
 - Security-Header werden beim Build als `dist/_headers` erzeugt (`config/security-headers.ts`), mit der CSP-Quelle der
   jeweiligen Supabase-URL. Eine `_redirects`-Datei ist nicht nötig (Cloudflare Pages SPA-Modus).
 - Schritt-für-Schritt-Anleitung für die manuellen Schritte: [Umgebungen](architecture/umgebungen.md).
-- **Offen:** Die Erweiterung des SessionStart-Hooks (`.claude/hooks/session-start.sh`) um `pnpm install` und die
-  pgTAP-Installation wurde aus Sicherheitsgründen nicht automatisch vorgenommen. Der Product Owner übernimmt sie
-  selbst (Vorschlag im Phase-0-Bericht).
+- Der SessionStart-Hook (`.claude/hooks/session-start.sh`) installiert in Cloud-Sessions die Abhängigkeiten und
+  pgTAP (vom Product Owner eingetragen).
 
 ### 0.7 Review
 Zwei Review-Runden mit adversarialer Gegenprüfung über DB/Security, CI/CD, Frontend und Doku:
@@ -159,7 +158,7 @@ Konten des Product Owners braucht, ist unten als offen markiert.
 
 ### Abnahmekriterien Phase 0
 - [x] `pnpm check` lokal grün; `pnpm e2e` grün; DB-Guardrails grün (`pnpm db:test:local`).
-- [ ] CI auf GitHub grün (alle 4 Jobs), inklusive `supabase test db` gegen das echte Supabase-Image.
+- [x] CI auf GitHub grün (alle 4 Jobs, Run #8), inklusive `supabase test db` gegen das echte Supabase-Image.
 - [x] Hartkodierter JSX-Text und Import `modules/alpha → modules/beta` lassen den Lint fehlschlagen (dauerhaft
       abgesichert durch `tests/lint/`, inklusive Umgehungsversuchen).
 - [x] Verstöße gegen die DB-Regeln lassen die Guardrails fehlschlagen: Tabelle ohne RLS, `FOR ALL`-Policy,
