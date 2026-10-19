@@ -1,0 +1,220 @@
+-- Auth helpers for pgTAP tests: create auth users and act as a client (RLS tests).
+--
+-- Include it inside the test transaction, right after `begin;`, so everything below is rolled back
+-- together with the test:
+--
+--   begin;
+--   create extension if not exists pgtap with schema extensions;
+--   \ir ../helpers/auth.psql
+--   select plan(n);
+--
+-- The `.psql` extension keeps this file out of both runners' test discovery (`supabase test db`
+-- runs pg_prove with --ext .sql --ext .pg; scripts/db-test-local.sh does the same). `\ir` resolves
+-- relative to the including file. `supabase test db` mounts the whole supabase/tests directory, so
+-- the include works when the suite runs as a whole (see supabase/README.md for single files).
+--
+--   tests.create_user(email, meta)          inserts an auth user like GoTrue does (the sign-up
+--                                           trigger fires) as the CURRENT role; returns its id.
+--                                           Optional: password_hash (default '' = none) and
+--                                           confirmed (default true); unconfirmed rows look like
+--                                           admin.createUser before Confirm(): no e-mail was sent
+--   tests.create_user_as(role, email, meta) the same as `role` (e.g. supabase_auth_admin, the role
+--                                           GoTrue connects as); null if the session may not
+--                                           switch to that role
+--   tests.sign_up(email, hash, meta)        self-service sign-up with confirmations on (POST
+--                                           /signup, or /otp for a new address): an unconfirmed
+--                                           user with that password hash, then the confirmation
+--                                           e-mail is "sent" (confirmation_token and
+--                                           confirmation_sent_at, like GoTrue's sendConfirmation)
+--   tests.confirm_email(email)              confirms the address like GoTrue's User.Confirm: one
+--                                           UPDATE of confirmation_token and email_confirmed_at
+--   tests.run_as(role, statement)           runs one SQL statement as `role`; true, or null if
+--                                           the session may not switch to that role
+--   tests.user_id(email)                    id of an auth user (null if none); callable as any role
+--   tests.as_user(email)                    act as that user: role authenticated + JWT claims
+--   tests.as_anon()                         act as an anonymous client: role anon + anon claims
+--   tests.reset_auth()                      back to the session user (postgres) without claims
+--
+-- The role switches use set_config('role', ...), i.e. SET LOCAL ROLE: they last until the test's
+-- rollback at the latest. SET ROLE is not allowed inside SECURITY DEFINER functions, so every helper
+-- that switches roles runs as invoker; they pin nothing in search_path and qualify every name.
+
+create schema tests;
+
+create function tests.user_id(user_email text)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select u.id from auth.users u where u.email = pg_catalog.lower(pg_catalog.btrim(user_email));
+$$;
+
+-- Mirrors the row GoTrue writes on sign-up (aud/role 'authenticated', instance_id = uuid.Nil,
+-- provider metadata in raw_app_meta_data, client-supplied `options.data` in raw_user_meta_data,
+-- token columns '' instead of null, '' as password hash for "no password"). Users are created
+-- confirmed unless `confirmed` is false. `meta` may be any jsonb or null, exactly like the untrusted
+-- metadata the trigger has to cope with.
+create function tests.create_user(
+  user_email text,
+  meta jsonb default '{}'::jsonb,
+  password_hash text default '',
+  confirmed boolean default true
+)
+returns uuid
+language plpgsql
+as $$
+declare
+  new_id uuid := pg_catalog.gen_random_uuid();
+  has_instance_id boolean := exists (
+    select 1
+      from pg_catalog.pg_attribute a
+     where a.attrelid = 'auth.users'::pg_catalog.regclass
+       and a.attname = 'instance_id'
+       and not a.attisdropped
+  );
+begin
+  execute pg_catalog.format(
+    $sql$
+      insert into auth.users (
+        %s id, aud, role, email, encrypted_password, email_confirmed_at,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+      ) values (
+        %s $1, 'authenticated', 'authenticated', $2, $4,
+        case when $5 then pg_catalog.now() end,
+        '', '', '', '',
+        '{"provider": "email", "providers": ["email"]}'::jsonb, $3, pg_catalog.now(), pg_catalog.now()
+      )
+    $sql$,
+    case when has_instance_id then 'instance_id,' else '' end,
+    case when has_instance_id then '''00000000-0000-0000-0000-000000000000''::uuid,' else '' end
+  ) using new_id, pg_catalog.lower(pg_catalog.btrim(user_email)), meta, password_hash, confirmed;
+  return new_id;
+end;
+$$;
+
+-- GoTrue's Signup handler with confirmations on: INSERT of the unconfirmed user, then (same
+-- transaction) sendConfirmation stores the token hash and the time the mail went out. The token value
+-- is irrelevant to the database; it only has to be non-empty.
+create function tests.sign_up(user_email text, password_hash text, meta jsonb default '{}'::jsonb)
+returns uuid
+language plpgsql
+as $$
+declare
+  new_id uuid := tests.create_user(user_email, meta, password_hash, false);
+begin
+  update auth.users
+     set confirmation_token = pg_catalog.md5(new_id::text),
+         confirmation_sent_at = pg_catalog.now()
+   where id = new_id;
+  return new_id;
+end;
+$$;
+
+-- GoTrue's User.Confirm (internal/models/user.go): UpdateOnly(confirmation_token, email_confirmed_at),
+-- pop adds updated_at.
+create function tests.confirm_email(user_email text)
+returns void
+language plpgsql
+as $$
+declare
+  target_id uuid := tests.user_id(user_email);
+begin
+  if target_id is null then
+    raise exception 'tests.confirm_email: no auth user with e-mail %', user_email;
+  end if;
+  update auth.users
+     set confirmation_token = '',
+         email_confirmed_at = pg_catalog.now(),
+         updated_at = pg_catalog.now()
+   where id = target_id;
+end;
+$$;
+
+create function tests.reset_auth()
+returns void
+language plpgsql
+as $$
+begin
+  perform pg_catalog.set_config('role', 'none', true);
+  perform pg_catalog.set_config('request.jwt.claims', '', true);
+end;
+$$;
+
+create function tests.create_user_as(role_name text, user_email text, meta jsonb default '{}'::jsonb)
+returns uuid
+language plpgsql
+as $$
+declare
+  new_id uuid;
+begin
+  begin
+    perform pg_catalog.set_config('role', role_name, true);
+  exception when others then
+    return null; -- this database does not let the session user assume role_name
+  end;
+  new_id := tests.create_user(user_email, meta);
+  perform tests.reset_auth();
+  return new_id;
+end;
+$$;
+
+create function tests.run_as(role_name text, statement text)
+returns boolean
+language plpgsql
+as $$
+begin
+  begin
+    perform pg_catalog.set_config('role', role_name, true);
+  exception when others then
+    return null; -- this database does not let the session user assume role_name
+  end;
+  execute statement;
+  perform tests.reset_auth();
+  return true;
+end;
+$$;
+
+create function tests.as_user(user_email text)
+returns void
+language plpgsql
+as $$
+declare
+  target_id uuid := tests.user_id(user_email);
+begin
+  if target_id is null then
+    raise exception 'tests.as_user: no auth user with e-mail %', user_email;
+  end if;
+  perform tests.reset_auth();
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object(
+      'sub', target_id,
+      'role', 'authenticated',
+      'aud', 'authenticated',
+      'email', pg_catalog.lower(pg_catalog.btrim(user_email))
+    )::text,
+    true
+  );
+  perform pg_catalog.set_config('role', 'authenticated', true);
+end;
+$$;
+
+create function tests.as_anon()
+returns void
+language plpgsql
+as $$
+begin
+  perform tests.reset_auth();
+  perform pg_catalog.set_config('request.jwt.claims', '{"role": "anon"}', true);
+  perform pg_catalog.set_config('role', 'anon', true);
+end;
+$$;
+
+-- The helpers are called while acting as an API role, and create_user_as switches to GoTrue's role.
+-- Role postgres revokes EXECUTE from PUBLIC by default (baseline migration), so grant explicitly.
+grant usage on schema tests to anon, authenticated, service_role, supabase_auth_admin;
+grant execute on all functions in schema tests
+  to anon, authenticated, service_role, supabase_auth_admin;

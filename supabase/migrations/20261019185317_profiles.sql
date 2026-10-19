@@ -105,3 +105,24 @@ comment on function private.handle_new_user() is
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function private.handle_new_user();
+
+-- ---------------------------------------------------------------------------
+-- Backfill: accounts created before this migration (e.g. in the dashboard) get their profile the
+-- same way the trigger would have created it. Idempotent; a no-op on a fresh database.
+-- ---------------------------------------------------------------------------
+
+insert into public.profiles (id, display_name)
+select
+  u.id,
+  coalesce(
+    private.normalize_display_name(
+      case
+        when pg_catalog.jsonb_typeof(u.raw_user_meta_data) = 'object'
+          then u.raw_user_meta_data ->> 'display_name'
+      end
+    ),
+    private.normalize_display_name(pg_catalog.split_part(u.email, '@', 1)),
+    'user'
+  )
+from auth.users as u
+on conflict (id) do nothing;

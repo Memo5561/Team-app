@@ -68,7 +68,12 @@ if [[ "$MODE" == "types" ]]; then
   exit 0
 fi
 
+# Same discovery as `supabase test db` (pg_prove -r --ext .sql --ext .pg): helper includes use other
+# extensions (supabase/tests/helpers/*.psql, loaded with `\ir`) and the helpers folder is skipped
+# explicitly. LC_ALL=C keeps the order independent of the machine's locale.
 failed=0
+files=0
+assertions=0
 while IFS= read -r test_file; do
   name="${test_file#"$ROOT/"}"
   if ! output="$(psql_as postgres -t -A -f "$test_file" 2>&1)"; then
@@ -86,7 +91,17 @@ while IFS= read -r test_file; do
     failed=1
   else
     echo "ok       $name ($ran assertions)"
+    files=$((files + 1))
+    assertions=$((assertions + ran))
   fi
-done < <(find "$ROOT/supabase/tests" -type f \( -name '*.sql' -o -name '*.pg' \) | sort)
+done < <(find "$ROOT/supabase/tests" -path "$ROOT/supabase/tests/helpers" -prune -o \
+  -type f \( -name '*.sql' -o -name '*.pg' \) -print | LC_ALL=C sort)
 
+if [[ "$failed" -eq 0 && "$files" -eq 0 ]]; then
+  echo "no pgTAP tests found below supabase/tests" >&2 # `supabase test db` fails here as well
+  exit 1
+fi
+if [[ "$failed" -eq 0 ]]; then
+  echo "passed   $files files, $assertions assertions"
+fi
 exit "$failed"

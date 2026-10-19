@@ -46,6 +46,8 @@ const NON_TEXT_ATTRIBUTES = [
   'lang',
   'dir',
   'autoComplete',
+  'autoCapitalize',
+  'autoCorrect',
   'inputMode',
   'enterKeyHint',
   'accept',

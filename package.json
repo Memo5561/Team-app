@@ -17,6 +17,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "e2e": "playwright test",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "check:bundle": "node scripts/check-bundle-secrets.mjs dist",
@@ -26,7 +27,8 @@
     "db:test": "supabase test db",
     "db:test:local": "bash scripts/db-test-local.sh",
     "db:types": "bash scripts/gen-db-types.sh",
-    "db:types:local": "bash scripts/db-test-local.sh --types"
+    "db:types:local": "bash scripts/db-test-local.sh --types",
+    "supabase:env": "node scripts/supabase-env.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "5.9.2",

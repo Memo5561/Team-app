@@ -9,7 +9,8 @@
 --     (which the baseline migration revokes)
 --   - the `extensions` schema with pgTAP pre-installed by supabase_admin (supautils treats pgtap as
 --     a privileged extension, so its functions stay executable by the API roles)
---   - the `auth` schema (owned by supabase_auth_admin): users, identities, auth.uid()/role()/jwt()
+--   - the `auth` schema (owned by supabase_auth_admin): users (incl. the unique e-mail index),
+--     identities, auth.uid()/role()/jwt(); postgres is a member of supabase_auth_admin
 --   - the CLI overlay for `auto_expose_new_tables = false` (end of file)
 
 create role postgres login createdb createrole replication bypassrls;
@@ -20,6 +21,10 @@ create role authenticator login noinherit;
 create role supabase_auth_admin nologin noinherit;
 grant anon, authenticated, service_role to authenticator;
 grant anon, authenticated, service_role to postgres with admin option;
+-- As in the image's role setup (Supabase CLI bootstrap globals: "GRANT supabase_auth_admin TO
+-- postgres GRANTED BY supabase_admin"). Lets tests insert auth users as GoTrue's role; the tests
+-- skip that case where a database does not allow the switch (supabase/tests/helpers/auth.psql).
+grant supabase_auth_admin to postgres;
 
 alter database postgres owner to postgres;
 alter schema public owner to postgres;
@@ -80,6 +85,10 @@ create table auth.users (
   deleted_at timestamptz,
   is_anonymous boolean not null default false
 );
+
+-- GoTrue enforces unique e-mail addresses for non-SSO users with this partial index (it replaced
+-- users_email_key when SSO users were introduced); the test helpers look users up by e-mail.
+create unique index users_email_partial_key on auth.users (email) where (is_sso_user = false);
 
 create table auth.identities (
   provider_id text not null,

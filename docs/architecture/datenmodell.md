@@ -52,14 +52,66 @@ Abgleich mit §49: `users` → `auth.users` + `profiles`. `permissions` und `mod
 ## 3. Plattform und Organisation
 
 ### profiles (1:1 zu `auth.users`, kein Mandant)
+Seit Phase 1 (Migration `20261019185317_profiles.sql`).
+
 | Spalte | Typ | Regeln |
 |---|---|---|
 | id | uuid PK | FK → `auth.users(id)` on delete cascade |
-| display_name | text | not null, 1–100 Zeichen |
-| locale | text | default `'de'`, CHECK in unterstützte Sprachen |
+| display_name | text | not null; CHECK `profiles_display_name_valid`: 1–100 Zeichen, ohne führende oder folgende Leerzeichen (`= btrim(...)`), keine Steuerzeichen |
+| locale | text | not null, default `'de'`; CHECK `profiles_locale_supported`: `locale in ('de')` (wächst mit den UI-Sprachen) |
 | avatar_path | text | null |
+| created_at, updated_at | timestamptz | not null, default `now()`; `updated_at` per Trigger `profiles_set_updated_at` |
 
 Globale Account-Daten. Firmenbezogene Namen stehen in `memberships`.
+
+- **Anlage nur per Trigger:** `on_auth_user_created` (AFTER INSERT auf `auth.users`) ruft
+  `private.handle_new_user()` auf (`SECURITY DEFINER`, `search_path = ''`). Der Name kommt aus
+  `raw_user_meta_data->>'display_name'`, normalisiert mit `private.normalize_display_name()` (Folgen von Leer- und
+  Steuerzeichen → ein Leerzeichen, trimmen, auf 100 Zeichen kürzen). Fehlt er, gilt der normalisierte lokale Teil der
+  E-Mail-Adresse, sonst `'user'`. `locale` nur, wenn unterstützt, sonst `'de'`. Metadaten, die kein JSON-Objekt sind,
+  werden ignoriert. `ON CONFLICT DO NOTHING`; der Trigger wirft nie einen Fehler, damit ein Sign-up nicht mit einem
+  Rohfehler abbricht. Konten, die vor der Migration existierten, bekommen ihr Profil per einmaligem Backfill in
+  derselben Migration (gleiche Regeln, idempotent).
+- Die Zeile entsteht schon vor der E-Mail-Bestätigung; unbestätigte Konten werden später bereinigt (E-45). Hat
+  sich jemand mit fremder Adresse registriert, bleibt sein Name stehen, bis das Profil bearbeitbar ist (E-46,
+  akzeptiertes Restrisiko).
+- **Rechte in Phase 1:** RLS an, Policy `profiles_select_own` (`id = auth.uid()`), Grant nur `SELECT` an
+  `authenticated`. Kein `INSERT`/`UPDATE`/`DELETE`, bis eine spätere Phase das Profil bearbeitbar macht.
+- Das Registrierungsformular normalisiert den Namen vorab nach derselben Regel (`src/platform/auth/schemas.ts`).
+  Es ist dabei etwas strenger: Unicode-Leerzeichen (z. B. geschützte Leerzeichen) erkennt die Datenbank je nach
+  Locale nicht als Leerzeichen, das Formular schon.
+
+### Eigene Trigger auf `auth.users`
+`auth.users` gehört Supabase Auth (GoTrue); ihre Spalten ändern wir nicht. Wir hängen nur Trigger an, deren
+Funktionen in `private` liegen (`SECURITY DEFINER`, `search_path = ''`, für `anon`/`authenticated` nicht
+ausführbar).
+
+| Trigger | Zeitpunkt | Funktion | Wirkung |
+|---|---|---|---|
+| `on_auth_user_created` | AFTER INSERT | `private.handle_new_user()` | legt `profiles` an (siehe oben) |
+| `on_auth_user_first_confirmation` | BEFORE UPDATE (ohne Spaltenliste) | `private.clear_password_before_first_confirmation()` | löscht ein Passwort, das vor der ersten Bestätigung gesetzt wurde (E-46) |
+
+`on_auth_user_first_confirmation` (seit Phase 1, Migration
+`20261019204325_clear_password_before_first_confirmation.sql`) setzt `encrypted_password := null`, wenn
+- `old.email_confirmed_at is null and new.email_confirmed_at is not null` (erste Bestätigung),
+- `old.confirmation_sent_at is not null` (eine Bestätigungs-E-Mail ging hinaus, also Selbstregistrierung) und
+- `new.encrypted_password is not distinct from old.encrypted_password` (setzt die bestätigende Anweisung selbst
+  ein Passwort, bleibt es; das geht nur mit privilegiertem SQL).
+
+`NULL` bedeutet für GoTrue „kein Passwort“, wie `''`. Unberührt bleiben `admin.createUser` mit
+`email_confirm: true` (keine Mail, `confirmation_sent_at` leer), Passwörter aus `updateUser` und „Passwort
+vergessen“ nach der Bestätigung (sie ändern `email_confirmed_at` nicht) und alle anderen Updates. Der Trigger beruht
+auf der Annahme, wie GoTrue bei Registrierung und Bestätigung schreibt. Sie ist im Kommentar der Migration mit
+Quellstellen belegt (v2.197.0). Ob sie nach einem Update von Supabase Auth noch stimmt, prüfen die
+Integrationstests gegen das echte GoTrue (`tests/integration/password-guard.test.ts`: Bestätigung über die Mail des
+Angreifers, eine spätere Registrierung per Link, den Anmeldelink von `/login` und „Passwort vergessen“); pgTAP
+spielt GoTrues Anweisungen nur nach. Die Integrationstests sehen nur die Version, die die gepinnte Supabase CLI
+startet. Das gehostete Supabase Auth (Staging, Production) wird unabhängig davon aktualisiert; dort ist der Nachweis
+E-46 aus `umgebungen.md` §2.4 (Test nach dem Deployment, Schritt 4) nach Auth-Updates zu wiederholen.
+
+Der Trigger hat bewusst keine Spaltenliste (`UPDATE OF email_confirmed_at`): PostgreSQL legt für jede gelistete
+Spalte eine Abhängigkeit an und verweigert dann `ALTER COLUMN … TYPE` und `DROP COLUMN` darauf. Das würde
+Migrationen von Supabase Auth an seiner eigenen Tabelle blockieren. Die Funktion prüft alte und neue Werte selbst.
 
 ### organizations
 | Spalte | Typ | Regeln |

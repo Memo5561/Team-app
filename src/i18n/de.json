@@ -1,12 +1,116 @@
 {
   "app": {
     "name": "TeamPanel",
-    "pageTitle": "{{page}} · TeamPanel"
+    "pageTitle": "{{page}} · TeamPanel",
+    "loading": "Wird geladen …"
+  },
+  "ui": {
+    "passwordInput": {
+      "show": "Passwort anzeigen"
+    }
+  },
+  "auth": {
+    "fields": {
+      "name": "Name",
+      "email": "E-Mail",
+      "password": "Passwort",
+      "newPassword": "Neues Passwort",
+      "confirmPassword": "Passwort wiederholen"
+    },
+    "validation": {
+      "nameRequired": "Bitte gib deinen Namen ein.",
+      "nameTooLong": "Der Name darf höchstens 100 Zeichen lang sein.",
+      "emailRequired": "Bitte gib deine E-Mail-Adresse ein.",
+      "emailInvalid": "Bitte gib eine gültige E-Mail-Adresse ein.",
+      "passwordRequired": "Bitte gib dein Passwort ein.",
+      "newPasswordRequired": "Bitte gib ein neues Passwort ein.",
+      "passwordTooShort": "Das Passwort muss mindestens 10 Zeichen lang sein.",
+      "passwordTooLong": "Das Passwort ist zu lang. Bitte wähle ein kürzeres.",
+      "confirmPasswordRequired": "Bitte gib das Passwort noch einmal ein.",
+      "passwordMismatch": "Die Passwörter stimmen nicht überein."
+    },
+    "login": {
+      "title": "Anmelden",
+      "description": "Melde dich mit deiner E-Mail-Adresse an.",
+      "forgotPassword": "Passwort vergessen?",
+      "submit": "Anmelden",
+      "or": "oder",
+      "magicLink": "Anmeldelink per E-Mail",
+      "magicLinkHint": "Kein Passwort festgelegt? Wir schicken dir einen Link, mit dem du dich ohne Passwort anmeldest.",
+      "noAccount": "Noch kein Konto?",
+      "signupLink": "Registrieren",
+      "resendConfirmation": "Bestätigungs-E-Mail erneut senden",
+      "reasonSignedOut": "Deine Sitzung ist abgelaufen oder wurde beendet. Bitte melde dich erneut an.",
+      "globalSignOutIncomplete": "Du bist auf diesem Gerät abgemeldet. Andere Geräte können noch bis zu einer Stunde angemeldet bleiben."
+    },
+    "signup": {
+      "title": "Konto erstellen",
+      "description": "Leg dein TeamPanel-Konto an.",
+      "hint": "Wir schicken dir einen Link zur Bestätigung. Danach kannst du ein Passwort festlegen oder dich weiter per E-Mail-Link anmelden.",
+      "submit": "Konto erstellen",
+      "haveAccount": "Schon ein Konto?",
+      "loginLink": "Anmelden"
+    },
+    "forgot": {
+      "title": "Passwort vergessen",
+      "description": "Gib deine E-Mail-Adresse ein. Wir schicken dir einen Link, mit dem du ein neues Passwort festlegst. Das geht auch, wenn du noch keines hast.",
+      "submit": "Link senden",
+      "backToLogin": "Zurück zur Anmeldung",
+      "backToHome": "Zurück zur Startseite"
+    },
+    "reset": {
+      "title": "Neues Passwort festlegen",
+      "description": "Wähle ein neues Passwort mit mindestens 10 Zeichen.",
+      "submit": "Passwort speichern",
+      "cancel": "Abbrechen",
+      "requestNewLink": "Neuen Link anfordern"
+    },
+    "setup": {
+      "title": "Passwort festlegen",
+      "description": "Deine E-Mail-Adresse ist bestätigt. Wenn du dich auch mit Passwort anmelden möchtest, leg jetzt eines mit mindestens 10 Zeichen fest.",
+      "hint": "Das ist freiwillig: Du kannst dich weiter per E-Mail-Link anmelden und ein Passwort später über „Passwort vergessen“ festlegen.",
+      "skip": "Überspringen"
+    },
+    "confirm": {
+      "emailTitle": "Anmeldung bestätigen",
+      "emailDescription": "Bestätige deine E-Mail-Adresse, um dich anzumelden.",
+      "recoveryTitle": "Passwort zurücksetzen",
+      "recoveryDescription": "Bestätige, dass du ein neues Passwort festlegen möchtest.",
+      "continue": "Weiter",
+      "signedInAs": "Du bist als {{email}} angemeldet. Wenn du fortfährst, wirst du abgemeldet.",
+      "invalidTitle": "Link ungültig oder abgelaufen",
+      "invalidDescription": "Dieser Link funktioniert nicht mehr. Fordere einfach einen neuen an.",
+      "toLogin": "Zur Anmeldung",
+      "toForgotPassword": "Passwort zurücksetzen"
+    },
+    "checkInbox": {
+      "title": "Prüfe dein Postfach",
+      "signup": "Wir haben dir eine E-Mail an {{email}} geschickt. Öffne den Link darin, um fortzufahren.",
+      "magicLink": "Falls es ein Konto mit {{email}} gibt, haben wir dir einen Anmeldelink geschickt.",
+      "recovery": "Falls es ein Konto mit {{email}} gibt, haben wir dir einen Link zum Zurücksetzen geschickt.",
+      "resend": "Falls {{email}} noch nicht bestätigt ist, haben wir dir eine neue Bestätigungs-E-Mail geschickt.",
+      "hint": "Keine E-Mail erhalten? Warte eine Minute und versuche es erneut.",
+      "back": "Zurück"
+    }
   },
   "home": {
-    "title": "TeamPanel",
-    "subtitle": "Dein Team-System entsteht gerade.",
-    "status": "Das technische Fundament steht. Die ersten Funktionen folgen in den nächsten Phasen."
+    "greeting": "Hallo, {{name}}!",
+    "greetingFallback": "Hallo!",
+    "signedInAs": "Angemeldet als {{email}}",
+    "profileError": "Dein Profil konnte nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "emptyTitle": "Noch kein Unternehmen",
+    "emptyDescription": "Du gehörst noch zu keinem Unternehmen. Als Nächstes kannst du hier dein Unternehmen einrichten.",
+    "signOut": "Abmelden",
+    "signOutEverywhere": "Überall abmelden",
+    "signOutEverywhereHint": "„Überall abmelden“ beendet deine Sitzung auf allen Geräten.",
+    "changePassword": "Passwort ändern",
+    "notices": {
+      "passwordSet": "Passwort festgelegt. Du kannst dich ab jetzt auch mit E-Mail-Adresse und Passwort anmelden.",
+      "passwordUpdated": "Dein Passwort wurde geändert. Andere Geräte wurden abgemeldet.",
+      "passwordUpdatedOthersPending": "Dein Passwort wurde geändert. Andere Geräte können noch bis zu einer Stunde angemeldet bleiben.",
+      "weakPassword": "Dein Passwort gilt nicht mehr als sicher. Bitte ändere es bald. Dafür schicken wir dir einen Link per E-Mail."
+    }
   },
   "notFound": {
     "title": "Seite nicht gefunden",
@@ -16,6 +120,8 @@
   "errorBoundary": {
     "title": "Etwas ist schiefgelaufen",
     "description": "Bitte lade die Seite neu. Wenn der Fehler bleibt, melde dich beim Support.",
+    "networkTitle": "Keine Verbindung",
+    "networkDescription": "Bitte prüfe deine Internetverbindung und lade die Seite dann neu.",
     "reload": "Seite neu laden"
   },
   "config": {
@@ -26,10 +132,25 @@
   "errors": {
     "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
     "network": "Keine Verbindung. Bitte prüfe deine Internetverbindung.",
+    "serviceUnavailable": "Der Dienst ist gerade nicht erreichbar. Bitte versuche es gleich noch einmal.",
     "forbidden": "Dafür fehlt dir die Berechtigung.",
     "notFound": "Der Eintrag wurde nicht gefunden.",
     "conflict": "Das steht im Konflikt mit bestehenden Daten.",
     "invalidInput": "Bitte überprüfe deine Eingaben.",
-    "limitReached": "Das Limit deines Tarifs ist erreicht."
+    "limitReached": "Das Limit deines Tarifs ist erreicht.",
+    "invalidCredentials": "E-Mail-Adresse oder Passwort ist falsch.",
+    "emailNotConfirmed": "Bitte bestätige zuerst deine E-Mail-Adresse. Den Link dazu haben wir dir per E-Mail geschickt.",
+    "rateLimited": "Zu viele Versuche. Bitte warte kurz und versuche es dann erneut.",
+    "emailRateLimited": "Gerade wurden zu viele E-Mails verschickt. Bitte versuche es in ein paar Minuten erneut.",
+    "weakPassword": "Dieses Passwort ist zu unsicher. Bitte wähle ein anderes.",
+    "pwnedPassword": "Dieses Passwort ist aus einem Datenleck bekannt. Bitte wähle ein anderes.",
+    "samePassword": "Das neue Passwort muss sich vom bisherigen unterscheiden.",
+    "invalidEmail": "Diese E-Mail-Adresse ist ungültig.",
+    "emailNotAuthorized": "An diese E-Mail-Adresse können wir gerade keine E-Mails senden. Bitte verwende eine andere.",
+    "linkInvalid": "Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.",
+    "sessionExpired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
+    "newLinkRequired": "Aus Sicherheitsgründen brauchst du einen neuen Link. Fordere ihn über „Passwort vergessen“ an.",
+    "userBanned": "Dein Zugang ist gesperrt. Bitte wende dich an den Support.",
+    "signupDisabled": "Registrierungen sind gerade nicht möglich. Bitte versuche es später erneut."
   }
 }
