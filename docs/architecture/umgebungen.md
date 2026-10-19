@@ -37,11 +37,11 @@ Das ist ein Ersatz für schnelles Feedback. **Maßgeblich ist CI** mit dem echte
 
 Diese Schritte brauchen Konten, Zahlungsdaten und Geheimnisse. Deshalb führt sie ein Mensch aus und nicht Claude.
 
-### 2.0 Default-Branch `main`
+### 2.0 Default-Branch `main` ✅ (eingerichtet 2026-10-19)
 
-Bisher existiert nur der Arbeitsbranch dieser Session. Lege `main` aus dem abgenommenen Stand an (z. B. per Pull
-Request) und setze ihn unter *Settings → General → Default branch* als Default-Branch. Deploy-Workflow, Cloudflare
-Production und Branch-Schutz beziehen sich auf diesen Branch.
+`main` ist Default-Branch und per Ruleset „main schützen“ geschützt: Änderungen nur per Pull Request, die vier
+CI-Jobs müssen grün sein, kein Force-Push, kein Löschen. Claude arbeitet auf eigenen Branches und bringt Änderungen
+per PR nach `main`.
 
 ### 2.1 Supabase (zwei Projekte)
 
@@ -53,6 +53,7 @@ Production und Branch-Schutz beziehen sich auf diesen Branch.
    - Mindestpasswortlänge 10
    - „Secure password change“ aktivieren
    - „Leaked password protection“ aktivieren (nur Production; im Free-Plan von Staging nicht verfügbar, E-40)
+   - „Require current password when updating“ vorerst aus (Entscheidung in Phase 1)
    - unter *URL Configuration* Site-URL und Redirect-URLs der jeweiligen Domain eintragen
 5. Unter *Settings → API* prüfen, dass nur `public` und `graphql_public` exponiert sind (Default). Das Schema
    `private` darf **nie** exponiert werden. Die Einstellung „Default privileges for new entities“ (automatisches
@@ -69,9 +70,17 @@ Production und Branch-Schutz beziehen sich auf diesen Branch.
    - `production`: Apply gegen Production, mit „Required reviewers“ (du selbst)
 2. Bei allen drei unter *Deployment branches* nur den Default-Branch (`main`) zulassen.
 3. In jedem Environment drei Secrets anlegen (`production-plan` und `production` mit denselben Werten):
-   - `SUPABASE_ACCESS_TOKEN`: persönlicher Token von supabase.com → *Account → Access Tokens*
+   - `SUPABASE_ACCESS_TOKEN`: Token von supabase.com → *Account → Access Tokens* (Details unten)
    - `SUPABASE_DB_PASSWORD`: Datenbank-Passwort des jeweiligen Projekts
    - `SUPABASE_PROJECT_REF`: Project Ref des jeweiligen Projekts
+
+   **Access Token anlegen** (Supabase bietet projektbezogene Tokens mit feinen Rechten):
+   - *Resource access*: **Project** → nur das Projekt der jeweiligen Umgebung, nie „Organization“
+   - *Expires in*: höchstens ein Jahr ab heute (genau 1 Jahr wird abgelehnt); Erneuerung im Kalender vormerken
+   - *Permissions*: Vorlage **Read-only**, dann nur **Database → Migrations** auf **Read-write**.
+     `supabase link` braucht Lesezugriff auf mehrere Endpunkte, darunter **API Key Secrets**. Ohne dieses Recht
+     scheitert der Deploy mit „Authorization failed for the access token and project ref pair“.
+   - Für **Production** später enger: Account-/Organisationsrechte auf None und nur die gelesenen Endpunkte erlauben.
 4. *Settings → Branches* (empfohlen): Branch-Schutz für `main` mit den vier CI-Jobs als Pflicht-Checks. Der
    Deploy-Workflow prüft zusätzlich selbst, dass CI für den Commit grün ist.
 
@@ -83,12 +92,14 @@ aufgeweckt werden.
 
 ### 2.3 Cloudflare Pages (Frontend)
 
-1. *Workers & Pages → Create → Pages → Connect to Git*, Repository verbinden.
+1. *Workers & Pages → Create*. Cloudflare öffnet standardmäßig den **Workers**-Assistenten (erkennbar an
+   `npx wrangler deploy`). Ganz unten auf **„Looking to deploy Pages? Get started“** → **„Import an existing Git
+   repository“**. Beim GitHub-Dialog nur dieses Repository freigeben.
 2. Build-Einstellungen:
    - Framework preset: *None*
    - Build command: `pnpm build && pnpm check:bundle`
    - Build output directory: `dist`
-   - Environment variable `NODE_VERSION` = `22.22.2` oder neuer (Mindestversion laut `engines`)
+   - Environment variable `NODE_VERSION` = `22` (Cloudflare nimmt die neueste 22.x; Mindestversion laut `engines`)
 3. Umgebungsvariablen:
    - *Production*: `VITE_APP_ENV=production`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` des Production-Projekts
    - *Preview*: dieselben Variablen mit `VITE_APP_ENV=staging` und den Werten des Staging-Projekts
@@ -109,7 +120,21 @@ Eine `_redirects`-Datei ist nicht nötig: Ohne `404.html` behandelt Cloudflare P
 | Sentry (Error Tracking) | vor Pilot | EU-Datenregion, PII-Scrubbing |
 | Stripe | 12 | getrennte Test-/Live-Keys; Stripe Tax; Webhook-Secret nur in Supabase Edge Function Secrets |
 
-## 3. Was wohin gehört
+## 3. Aktueller Stand (2026-10-19)
+
+| Was | Stand |
+|---|---|
+| GitHub | `main` Default + geschützt; Environment `staging` (nur `main`) mit 3 Secrets |
+| Supabase Staging | Projekt `teampanel-staging`, Ref `pwhvfshrqkrjmfbduesb`, Region **eu-west-1 (Irland)** (E-41), Free-Plan; E-Mail-Auth-Einstellungen gesetzt; Site-URL `https://teampanel-8i0.pages.dev`, Redirect-URLs `https://teampanel-8i0.pages.dev/**` und `https://*.teampanel-8i0.pages.dev/**`; Baseline-Migration per *Deploy database* eingespielt (Run #2), Security Advisor ohne Befund |
+| Supabase Production | noch nicht angelegt (vor dem Pilot, Region Frankfurt) |
+| Cloudflare Pages | Projekt `teampanel`, Adresse `https://teampanel-8i0.pages.dev`; `main` baut vorerst **gegen Staging** (E-42); securityheaders.com: **A+** |
+| Access Token | `github-actions-teampanel-v2`, nur `teampanel-staging`, läuft am 2027-10-18 ab |
+| Offen | Production-Projekt + Environments `production-plan`/`production`; DPA mit Supabase/Cloudflare (E-17) |
+
+Öffentliche Staging-Werte (dürfen ins Frontend): URL `https://pwhvfshrqkrjmfbduesb.supabase.co`, Publishable Key
+`sb_publishable_PlelIBocPdu995Tikigp4g_gMSxQARg`.
+
+## 4. Was wohin gehört
 
 | Wert | Ort | Niemals |
 |---|---|---|

@@ -292,3 +292,15 @@ Abwesenheiten von Kollegen ohne Typ) ist deshalb eine `SECURITY DEFINER`-RPC mit
 „Leaked password protection“ gibt es nur in bezahlten Supabase-Plänen. Solange Staging im Free-Plan läuft (E-27),
 fehlt dort diese Prüfung. Das ist akzeptiert, weil Staging nur Testdaten enthält. Free-Projekte pausieren nach
 Inaktivität und müssen vor einem Deployment im Dashboard aufgeweckt werden.
+
+### E-41 🟨 Staging in Irland, Production in Frankfurt
+Das Staging-Projekt wurde in `eu-west-1` (Irland) angelegt; die Region lässt sich nachträglich nicht ändern.
+**Entscheidung:** Staging bleibt dort. Datenschutzrechtlich ist das gleichwertig (EU), der Unterschied ist nur die
+Latenz (~35–45 ms statt ~10–15 ms aus Österreich), und Staging enthält nur Testdaten. Production wird in
+`eu-central-1` (Frankfurt) angelegt.
+
+### E-42 🟨 Cloudflare-Production zeigt vorerst auf Staging
+Solange es kein Production-Supabase gibt, baut der `main`-Branch auf Cloudflare Pages mit den Staging-Werten
+(`VITE_APP_ENV=staging`). So gibt es sofort eine erreichbare Testadresse. **Vor dem Pilot** werden die drei
+Variablen der Production-Umgebung in Cloudflare auf das Production-Projekt umgestellt (und `VITE_APP_ENV=production`).
+
