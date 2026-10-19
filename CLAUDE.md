@@ -34,6 +34,18 @@ Modulares Team-Management-SaaS für KMU (AT/EU). Responsive Web-App/PWA. **Keine
 - Neue Tabellen müssen die Guardrails in `supabase/tests/database/000_guardrails.test.sql` bestehen: RLS an; Grants an `authenticated` explizit (Default: keine); keine `FOR ALL`-Policies; `unique (organization_id, id)`; Views mit `security_invoker`; Definer-Funktionen mit `search_path = ''`.
 - E-Mail-Spalten: `text` mit `lower(btrim())`-Normalisierung, kein `citext` (E-38).
 
+## Wissensgraph (graphify) – immer zuerst nutzen
+Wunsch des Product Owners: Tokens sparen. Der Graph liegt versioniert in `graphify-out/` (`graph.json`,
+`GRAPH_REPORT.md`, semantischer Cache, `manifest.json`); Arbeitsdateien, AST-Cache und `graph.html` bleiben lokal.
+- Vor dem ersten grep/Suchen/Dateilesen zu einer Frage über Code oder Doku: `graphify query "<frage>"` (Option
+  `--budget N`). Beziehungen: `graphify path "<A>" "<B>"`, einzelne Konzepte: `graphify explain "<X>"`. Rohdateien nur
+  für die Stellen lesen, die der Graph genannt hat. Die Regel gehört auch in jeden Subagent-Prompt, der Code erkundet.
+- Die Knoten sind überwiegend deutsch beschriftet (Doku) bzw. englisch (Code): Suchbegriffe in beiden Sprachen versuchen.
+- `GRAPH_REPORT.md` nur für Architekturüberblicke lesen.
+- Nach Code-Änderungen: `graphify update .` (nur AST, keine Tokens). Nach Doku-Änderungen: `/graphify . --update`
+  (extrahiert nur geänderte Dokumente neu). Den aktualisierten Graphen mit committen; große Diffs an `graph.json` sind
+  normal.
+
 ## Arbeitsweise pro Phase (§90)
 Analyse → kurzer Plan → Datenmodell & Permissions → Tests definieren → implementieren → Tests/Lint/Typecheck → Security prüfen → UI/UX prüfen → Doku aktualisieren → Checkpoint-Bericht (§91). Nur eine Phase gleichzeitig. Keine eigenmächtigen großen Features. Offene 🟥-Entscheidungen der Phase vorher beim Product Owner klären.
 
