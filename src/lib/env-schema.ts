@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Zod's JIT compiler probes `new Function`, which the CSP (script-src 'self') blocks and reports.
+z.config({ jitless: true });
+
 /**
  * Environment contract of the frontend. Everything here ends up in the public JS bundle,
  * so only browser-safe values are allowed; the schema actively rejects secret keys.
@@ -23,15 +26,21 @@ function jwtRole(token: string): string | undefined {
   }
 }
 
+// Allowlist: only a publishable key (sb_publishable_…) or a legacy JWT whose role is exactly 'anon'.
+// Explicit messages for the dangerous mix-ups (secret / service_role key in the browser).
 const publishableKey = z
   .string()
   .trim()
-  .min(20, 'must be a Supabase publishable (or legacy anon) key')
   .refine((key) => !key.startsWith('sb_secret_'), {
     message: 'is a secret key; only the publishable key may be used in the browser',
+    abort: true,
   })
   .refine((key) => jwtRole(key) !== 'service_role', {
     message: 'is a service_role key; only the publishable/anon key may be used in the browser',
+    abort: true,
+  })
+  .refine((key) => /^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(key) || jwtRole(key) === 'anon', {
+    message: 'must be a Supabase publishable key (sb_publishable_…) or a legacy anon key',
   });
 
 export const envSchema = z

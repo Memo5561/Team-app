@@ -60,6 +60,16 @@ describe('parseEnv', () => {
     expect(issue).toMatch(/service_role/);
   });
 
+  it('accepts only publishable or anon keys (allowlist)', () => {
+    expect(
+      issuesOf({ ...valid, VITE_SUPABASE_PUBLISHABLE_KEY: 'some-random-api-key-value-123' })[0],
+    ).toMatch(/must be a Supabase publishable key/);
+    const authenticatedJwt = fakeJwt({ role: 'authenticated', iss: 'supabase' });
+    expect(issuesOf({ ...valid, VITE_SUPABASE_PUBLISHABLE_KEY: authenticatedJwt })[0]).toMatch(
+      /must be a Supabase publishable key/,
+    );
+  });
+
   it('rejects non-http URLs and unknown environments', () => {
     expect(issuesOf({ ...valid, VITE_SUPABASE_URL: 'ftp://example.com' })[0]).toMatch(
       /^VITE_SUPABASE_URL/,

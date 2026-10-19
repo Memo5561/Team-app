@@ -4,6 +4,11 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Only design tokens are available as colors: Tailwind's default palette (bg-red-500 …) is removed. */
+@theme {
+  --color-*: initial;
+}
+
 @theme inline {
   --font-sans: var(--font-family-sans);
 
@@ -38,7 +43,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
 
   html {

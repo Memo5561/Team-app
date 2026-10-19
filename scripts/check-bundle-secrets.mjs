@@ -11,6 +11,8 @@ const FORBIDDEN = [
   { name: 'Stripe secret key', pattern: /\b[sr]k_(?:live|test)_[A-Za-z0-9]{10,}/ },
   { name: 'Stripe webhook secret', pattern: /\bwhsec_[A-Za-z0-9]{10,}/ },
   { name: 'Resend API key', pattern: /\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9]{8,}/ },
+  { name: 'Supabase personal access token', pattern: /\bsbp_[a-f0-9]{40}\b/ },
+  { name: 'Postgres URL with password', pattern: /postgres(?:ql)?:\/\/[^\s:@/'"]+:[^\s@/'"]+@/ },
   { name: 'private key', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
 ];
 

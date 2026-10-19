@@ -1,95 +1,79 @@
-// Project-specific ESLint rules that enforce TeamPanel's architecture (docs/architecture/architektur.md §14).
-// Kept separate from eslint.config.js so tests/lint can verify them in isolation.
+// Project-specific ESLint configuration blocks (docs/architecture/architektur.md §14).
+// Kept separate from eslint.config.js so tests/lint can verify them in isolation as well.
 
 /** @typedef {import('eslint').Linter.Config} Config */
 
-const RELATIVE_PARENT = {
-  regex: '^\\.\\./',
-  message: 'Import code outside the current directory via the "@/" alias.',
-};
-
 /**
- * @param {string} value
- * @returns {string}
- */
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * @param {{ regex: string, message: string }[]} patterns
- * @returns {Config['rules']}
- */
-function restrictImports(patterns) {
-  return { 'no-restricted-imports': ['error', { patterns: [RELATIVE_PARENT, ...patterns] }] };
-}
-
-/**
- * Layering: app → modules → platform → components/lib. Feature modules never import each other.
- * Later blocks override earlier ones for the same rule, so the generic src block comes first.
+ * Layer architecture: app → modules → platform → components → lib. Feature modules never import
+ * each other; paths are resolved before checking (config/eslint-plugin-teampanel.js).
  *
- * @param {string[]} moduleNames directory names below src/modules
- * @returns {Config[]}
+ * @param {import('eslint').ESLint.Plugin} teampanelPlugin
+ * @returns {Config}
  */
-export function architectureConfigs(moduleNames) {
-  return [
-    {
-      name: 'teampanel/architecture/src',
-      files: ['src/**/*.{ts,tsx}'],
-      rules: restrictImports([]),
-    },
-    {
-      name: 'teampanel/architecture/lib',
-      files: ['src/lib/**/*.{ts,tsx}', 'src/i18n/**/*.{ts,tsx}', 'src/types/**/*.{ts,tsx}'],
-      rules: restrictImports([
-        {
-          regex: '^@/(?:app|modules|platform|components)(?:/|$)',
-          message:
-            'src/lib, src/i18n and src/types are the lowest layer and must not import app code.',
-        },
-      ]),
-    },
-    {
-      name: 'teampanel/architecture/components',
-      files: ['src/components/**/*.{ts,tsx}'],
-      rules: restrictImports([
-        {
-          regex: '^@/(?:app|modules|platform)(?:/|$)',
-          message: 'Shared UI components must stay free of domain code.',
-        },
-      ]),
-    },
-    {
-      name: 'teampanel/architecture/platform',
-      files: ['src/platform/**/*.{ts,tsx}'],
-      rules: restrictImports([
-        {
-          regex: '^@/(?:app|modules)(?:/|$)',
-          message: 'The platform layer must not depend on feature modules or the app shell.',
-        },
-      ]),
-    },
-    ...moduleNames.map((name) => ({
-      name: `teampanel/architecture/modules/${name}`,
-      files: [`src/modules/${name}/**/*.{ts,tsx}`],
-      rules: restrictImports([
-        {
-          regex: `^@/modules/(?!${escapeRegex(name)}(?:/|$))`,
-          message:
-            'Feature modules must not import other feature modules. Move shared code to src/platform.',
-        },
-        {
-          regex: '^@/app(?:/|$)',
-          message: 'Feature modules must not depend on the app shell.',
-        },
-      ]),
-    })),
-  ];
+export function architectureConfig(teampanelPlugin) {
+  return {
+    name: 'teampanel/architecture',
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { teampanel: teampanelPlugin },
+    rules: { 'teampanel/layers': 'error' },
+  };
 }
 
 /**
- * No hard-coded user-visible text in JSX (spec §66). Covers text nodes and the attributes
- * that screen readers or browsers show to users.
+ * Technical JSX attributes that never carry user-visible text. Every other attribute (including
+ * custom props such as `description`) is checked, so new text props are covered by default.
+ * Entries are full-match regular expressions.
+ */
+const NON_TEXT_ATTRIBUTES = [
+  'className',
+  'style',
+  'type',
+  'key',
+  'id',
+  'name',
+  'role',
+  'href',
+  'to',
+  'src',
+  'srcSet',
+  'sizes',
+  'rel',
+  'target',
+  'method',
+  'action',
+  'htmlFor',
+  'form',
+  'lang',
+  'dir',
+  'autoComplete',
+  'inputMode',
+  'enterKeyHint',
+  'accept',
+  'pattern',
+  'loading',
+  'decoding',
+  'crossOrigin',
+  'referrerPolicy',
+  'variant',
+  'size',
+  'side',
+  'align',
+  'orientation',
+  'asChild',
+  'width',
+  'height',
+  'viewBox',
+  'xmlns',
+  'd',
+  'fill',
+  'stroke',
+  'data-.*',
+  'aria-(?:labelledby|describedby|controls|owns|hidden|live|current|expanded|selected|checked|pressed|haspopup|invalid|disabled|required|level|activedescendant|atomic|busy|modal|multiline|orientation|readonly|relevant|sort)',
+];
+
+/**
+ * No hard-coded user-visible text in JSX (spec §66): text nodes, template literals and every
+ * attribute except the technical ones above.
  *
  * @param {import('eslint').ESLint.Plugin} i18nextPlugin
  * @returns {Config}
@@ -105,19 +89,8 @@ export function i18nConfig(i18nextPlugin) {
         'error',
         {
           mode: 'jsx-only',
-          'jsx-attributes': {
-            include: [
-              'alt',
-              'aria-label',
-              'aria-description',
-              'aria-placeholder',
-              'aria-roledescription',
-              'aria-valuetext',
-              'label',
-              'placeholder',
-              'title',
-            ],
-          },
+          'should-validate-template': true,
+          'jsx-attributes': { exclude: NON_TEXT_ATTRIBUTES },
         },
       ],
     },
@@ -136,8 +109,22 @@ export const securityConfig = {
         message: 'dangerouslySetInnerHTML is forbidden (XSS). Render text through React instead.',
       },
       {
-        selector: "MemberExpression[property.name='innerHTML']",
-        message: 'innerHTML is forbidden (XSS).',
+        selector: 'MemberExpression[property.name=/^(?:innerHTML|outerHTML|srcdoc)$/]',
+        message: 'Writing HTML via innerHTML/outerHTML/srcdoc is forbidden (XSS).',
+      },
+      {
+        selector: 'Property[key.name=/^(?:innerHTML|outerHTML|srcdoc)$/]',
+        message: 'Setting innerHTML/outerHTML/srcdoc is forbidden (XSS).',
+      },
+      {
+        selector:
+          'CallExpression[callee.property.name=/^(?:insertAdjacentHTML|createContextualFragment|setHTMLUnsafe|parseHTMLUnsafe)$/]',
+        message: 'HTML-parsing DOM APIs are forbidden (XSS).',
+      },
+      {
+        selector:
+          "CallExpression[callee.object.name='document'][callee.property.name=/^(?:write|writeln)$/]",
+        message: 'document.write is forbidden (XSS).',
       },
     ],
     'no-eval': 'error',

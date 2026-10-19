@@ -283,7 +283,8 @@ src/
   styles/         Design Tokens (CSS-Variablen), Tailwind-Theme
 ```
 
-Regeln (per ESLint `import/no-restricted-paths` erzwungen):
+Regeln (per ESLint erzwungen: projekteigene Regel `teampanel/layers` in `config/eslint-plugin-teampanel.js`, die
+jeden Importpfad inklusive `import()` und `import.meta.glob` auflöst):
 
 - `modules/*` darf `platform/*`, `components/*` und `lib/*` importieren, **nicht** andere `modules/*`.
   Gemeinsames gehört in `platform`.
@@ -292,7 +293,7 @@ Regeln (per ESLint `import/no-restricted-paths` erzwungen):
   Andockstelle für eine öffentliche API (§81).
 - **Typen** werden aus der DB generiert (`supabase gen types typescript`) und nicht von Hand gepflegt.
 - **Fehler-Mapping** (§61): `lib/errors.ts` übersetzt Postgres-/PostgREST-Codes und eigene `RAISE`-Codes
-  (`TP001 limit_reached` …) in i18n-Keys. Rohfehler gehen nur ans Error-Tracking.
+  (`TP403` forbidden, `TP409` conflict, `TP422` limit_reached) in i18n-Keys. Rohfehler gehen nur ans Error-Tracking.
 - **i18n** (§66): `i18next` + `react-i18next`, ESLint-Regel gegen hartkodierte JSX-Texte.
 - **Design Tokens** (§48): CSS-Variablen (shadcn-Konvention). Firmenfarbe (Branding-Entitlement) überschreibt nur
   `--brand`, nie Kontrastfarben (Accessibility).
@@ -313,13 +314,13 @@ Regeln (per ESLint `import/no-restricted-paths` erzwungen):
 
 - **Migrationen** nur über `supabase/migrations/*.sql` (§76). Deployment auf staging/production ausschließlich durch
   CI (`supabase db push`) nach grünen Tests. Keine manuellen Änderungen in Produktion.
-- **CI (GitHub Actions)** pro PR: install → lint → typecheck → unit tests → `supabase start` → `supabase db reset` →
-  pgTAP-Tests (RLS) → Integrationstests → Build → Playwright (Smoke) → Typ-Drift-Check (generierte Typen müssen
-  aktuell sein).
+- **CI (GitHub Actions)** bei jedem Push, vier parallele Jobs: `quality` (Format, Lint, Typecheck, Unit-Tests),
+  `database` (`supabase start` → pgTAP → Typ-Drift-Check), `e2e` (Playwright Desktop + Mobile), `security` (gitleaks
+  über die gesamte Historie, `pnpm audit`, Bundle-Scan). Ab Phase 1 kommen Integrationstests dazu. Details:
+  [Roadmap 0.5](../roadmap.md#05-ci-und-automatisierung).
 - **Secrets** nur in GitHub Environments und Supabase-/Cloudflare-Konfiguration. `.env.example` ohne Werte. Das
   Frontend kennt nur `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` (öffentlich by design); das Env-Schema
-  lehnt Secret- und service_role-Keys ab.
-  `gitleaks` läuft in CI.
+  akzeptiert nur Publishable/anon-Keys (Allowlist).
 
 ## 16. Observability (§62)
 

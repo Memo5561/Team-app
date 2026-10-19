@@ -274,3 +274,21 @@ liegt im Repo-Root (vom Supabase CLI erwartet).
 ### E-36 🟩 Pagination
 **Entscheidung:** Keyset-Pagination (`created_at, id`) für Logs, Notifications und Zeiteinträge. Offset-Pagination nur
 für kleine, sortierbare Listen (Mitarbeiter).
+
+## F. Aus dem Phase-0-Review (2026-10-19)
+
+### E-38 🟩 Kein `citext` für E-Mail-Adressen
+`citext`-Operatoren liegen im Schema `extensions`. In `SECURITY DEFINER`-Funktionen mit `search_path = ''` (Pflicht)
+werden sie nicht gefunden, und Postgres vergleicht still case-sensitiv als `text`. Auch `citext = varchar`
+(`auth.users.email`) ist case-sensitiv. Einladungs- und Dublettenprüfungen würden dadurch unbemerkt falsch.
+**Entscheidung:** E-Mail-Spalten sind `text` mit `CHECK (email = lower(btrim(email)))`. RPCs normalisieren Eingaben,
+Vergleiche mit `auth.users.email` laufen über `lower(...)`. Die Baseline installiert `citext` nicht.
+
+### E-39 🟨 Kein gefilterter „öffentlicher“ View
+Views laufen per Guardrail immer mit `security_invoker`. Eine gefilterte Sicht auf sonst gesperrte Zeilen (z. B.
+Abwesenheiten von Kollegen ohne Typ) ist deshalb eine `SECURITY DEFINER`-RPC mit eigener Scope-Prüfung, kein View.
+
+### E-40 🟨 Staging-Einschränkungen im Free-Plan
+„Leaked password protection“ gibt es nur in bezahlten Supabase-Plänen. Solange Staging im Free-Plan läuft (E-27),
+fehlt dort diese Prüfung. Das ist akzeptiert, weil Staging nur Testdaten enthält. Free-Projekte pausieren nach
+Inaktivität und müssen vor einem Deployment im Dashboard aufgeweckt werden.

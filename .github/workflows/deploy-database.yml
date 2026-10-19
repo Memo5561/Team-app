@@ -1,6 +1,7 @@
-# Applies supabase/migrations to staging or production. Manual only, never automatic:
-# production additionally requires approval via the GitHub environment's protection rules.
-# Setup: docs/architecture/umgebungen.md
+# Applies supabase/migrations to staging or production. Manual only, never automatic, and only
+# from the default branch. Order: re-run DB tests → dry-run (visible in the job summary) →
+# apply. For production the apply job waits for approval (environment protection rules), so the
+# reviewer sees the dry-run first. Setup: docs/architecture/umgebungen.md §2.2
 name: Deploy database
 
 on:
@@ -22,41 +23,72 @@ concurrency:
 jobs:
   verify:
     name: Re-run database tests on this commit
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           check-latest: true
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec supabase start -x realtime,storage-api,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor
+      - run: pnpm exec supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - run: pnpm exec supabase test db
 
-  migrate:
-    name: Push migrations to ${{ inputs.environment }}
+  plan:
+    name: Dry-run against ${{ inputs.environment }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: ${{ inputs.environment }}
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    # Production secrets for the dry-run live in a separate environment without reviewers.
+    environment: ${{ inputs.environment == 'production' && 'production-plan' || 'staging' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           check-latest: true
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-      - name: Show pending migrations
-        run: pnpm exec supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD"
-      - name: Apply migrations
-        run: pnpm exec supabase db push --password "$SUPABASE_DB_PASSWORD"
+      # Secrets only on the steps that need them, never job-wide.
+      - name: Link project and show pending migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          pnpm exec supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          {
+            echo "## Pending migrations (${{ inputs.environment }})"
+            echo '```'
+            pnpm exec supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Apply migrations to ${{ inputs.environment }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          check-latest: true
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Link project and apply migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          pnpm exec supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          pnpm exec supabase db push --password "$SUPABASE_DB_PASSWORD"

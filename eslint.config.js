@@ -1,4 +1,3 @@
-import { readdirSync } from 'node:fs';
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import i18next from 'eslint-plugin-i18next';
@@ -7,11 +6,8 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import { architectureConfigs, i18nConfig, securityConfig } from './config/eslint-rules.js';
-
-const moduleNames = readdirSync(new URL('./src/modules', import.meta.url), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name);
+import teampanel from './config/eslint-plugin-teampanel.js';
+import { architectureConfig, i18nConfig, securityConfig } from './config/eslint-rules.js';
 
 export default defineConfig(
   globalIgnores([
@@ -67,7 +63,7 @@ export default defineConfig(
     files: ['scripts/**', 'config/**'],
     rules: { 'no-console': 'off' },
   },
-  ...architectureConfigs(moduleNames),
+  architectureConfig(teampanel),
   i18nConfig(i18next),
   securityConfig,
 );

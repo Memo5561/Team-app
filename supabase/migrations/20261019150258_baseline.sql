@@ -10,7 +10,9 @@
 -- ---------------------------------------------------------------------------
 -- 1. Extensions
 -- ---------------------------------------------------------------------------
-create extension if not exists citext with schema extensions;      -- case-insensitive e-mail columns
+-- No citext: inside `search_path = ''` functions its operators silently fall back to case-sensitive
+-- text comparison. E-mail columns are plain text normalized to lower case instead
+-- (docs/architecture/datenmodell.md §1).
 create extension if not exists btree_gist with schema extensions;  -- exclusion constraints (shifts, leave)
 
 -- ---------------------------------------------------------------------------
@@ -27,7 +29,9 @@ grant usage on schema private to authenticated, service_role;
 -- 3. Secure-by-default privileges for objects created by migrations (role postgres)
 --    Supabase grants anon/authenticated full access to every new object in `public` and relies on
 --    RLS alone. TeamPanel revokes that default: every table and function must be granted
---    explicitly, on top of RLS (defense in depth). service_role keeps its access (server only).
+--    explicitly, on top of RLS (defense in depth). service_role (server only, bypasses RLS) gets its
+--    access explicitly below, so behaviour does not depend on the hosted project's
+--    "default privileges for new entities" setting (supabase/config.toml: auto_expose_new_tables).
 -- ---------------------------------------------------------------------------
 alter default privileges for role postgres in schema public
   revoke all on tables from anon, authenticated;
@@ -36,7 +40,14 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   revoke all on functions from anon, authenticated;
 
+alter default privileges for role postgres in schema public
+  grant select, insert, update, delete on tables to service_role;
+alter default privileges for role postgres in schema public
+  grant usage, select on sequences to service_role;
+
 -- PostgreSQL grants EXECUTE on new functions to PUBLIC globally; that can only be revoked globally.
+-- Note: this applies to every function role postgres creates in ANY schema, including functions of
+-- extensions that postgres installs later. Grant EXECUTE explicitly where clients need it.
 alter default privileges for role postgres
   revoke execute on functions from public;
 

@@ -15,7 +15,11 @@ export function RouteErrorPage() {
   }, [error]);
 
   return (
-    <CenteredMessage title={t('errorBoundary.title')} description={t('errorBoundary.description')}>
+    <CenteredMessage
+      title={t('errorBoundary.title')}
+      description={t('errorBoundary.description')}
+      pageTitle={t('errorBoundary.title')}
+    >
       <Button
         onClick={() => {
           window.location.reload();

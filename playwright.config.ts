@@ -25,9 +25,11 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'], launchOptions } },
   ],
   webServer: {
+    // vite.config.ts pins host 127.0.0.1 and adds the production security headers to `preview`.
     command: `pnpm build --mode e2e && pnpm preview --mode e2e --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    stdout: 'pipe',
   },
 });

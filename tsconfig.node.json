@@ -33,5 +33,6 @@
     "config",
     "scripts",
     "tests"
-  ]
+  ],
+  "exclude": ["tests/e2e"]
 }

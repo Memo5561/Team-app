@@ -9,7 +9,7 @@
 
 ## Phasenübersicht
 
-| Phase | Inhalt | Abweichung zur Spec | Offene 🟥-Entscheidungen |
+| Phase | Inhalt | Abweichung zur Spec | Relevante 🟥-Entscheidungen (alle getroffen am 2026-10-19) |
 |---|---|---|---|
 | 0 | Repository-Fundament | + i18n, Design Tokens, Fehler-Mapping, DB-Baseline, Meta-Tests | – |
 | 1 | Auth | | – |
@@ -27,62 +27,87 @@
 | 13 | Reporting und CSV-Export | | – |
 | 14 | PWA und Responsive-Audit | | – |
 | 15 | Security Hardening | | – |
-| 16 | Pilot | | E-17, E-29 (rechtlich) |
+| 16 | Pilot | | E-17, E-29 (rechtliche Prüfung noch offen) |
 
 ---
 
 ## Phase 0 – Repository-Fundament
 
-**Status: umgesetzt, Abnahme ausstehend (CI-Lauf auf GitHub).** Ziel: ein leeres, aber produktionsreifes Gerüst,
-damit jede spätere Phase sofort Migrationen, Tests und UI hinzufügen kann. **Keine Businesslogik.**
+**Status: umgesetzt und überprüft.** Offen ist nur noch Staging (braucht Konten des Product Owners, siehe
+Abnahmekriterien). Ziel: ein leeres, aber produktionsreifes Gerüst, damit jede spätere Phase sofort Migrationen, Tests
+und UI hinzufügen kann. **Keine Businesslogik.**
 
 ### 0.1 Toolchain
-- Node ≥ 22.22 (`.nvmrc`), pnpm 10 (`packageManager`), Vite 8, React 19, TypeScript 6.0, alle Versionen exakt gepinnt.
+- Node ≥ 22.22.2 (`.nvmrc`: 22, `engines`), pnpm 10 (`packageManager`), Vite 8, React 19, TypeScript 6.0. Alle
+  npm-Abhängigkeiten sind exakt gepinnt; GitHub Actions laufen über Major-Tags und werden von Dependabot gepflegt.
   TypeScript 7 und ESLint 10 sind bewusst noch nicht im Einsatz: `typescript-eslint` unterstützt TypeScript nur bis
-  6.0, `eslint-plugin-jsx-a11y` ESLint nur bis 9. Dependabot meldet, sobald das Upgrade möglich ist.
-- `tsconfig.app.json` (Browser) / `tsconfig.node.json` (Configs, Skripte, Tests): `strict`, `noUncheckedIndexedAccess`,
-  `noUnusedLocals/Parameters`, `verbatimModuleSyntax`, `erasableSyntaxOnly`, Alias `@/`.
+  6.0, `eslint-plugin-jsx-a11y` ESLint nur bis 9.
+- `tsconfig.app.json` (Browser), `tsconfig.node.json` (Configs, Skripte, Unit-/Lint-Tests), `tsconfig.e2e.json`
+  (Playwright, mit DOM-Typen): `strict`, `noUncheckedIndexedAccess`, `noUnused*`, `verbatimModuleSyntax`,
+  `erasableSyntaxOnly`, Alias `@/`.
 - ESLint 9 (Flat Config): `typescript-eslint` strict- + stylistic-type-checked, `react-hooks`, `react-refresh`,
-  `jsx-a11y` (strict), `i18next/no-literal-string` (JSX-Text und sichtbare Attribute), Verbot von
-  `dangerouslySetInnerHTML`/`innerHTML`/`eval`. Architekturgrenzen in `config/eslint-rules.js`:
-  `modules/x` ↛ `modules/y`, `platform` ↛ `modules`/`app`, `components`/`lib` ↛ Domäne, keine `../`-Importe
-  (immer `@/`). Die Regeln sind selbst getestet (`tests/lint/`).
+  `jsx-a11y` (strict), Security-Regeln (`dangerouslySetInnerHTML`, `innerHTML`/`outerHTML`/`srcdoc`,
+  `insertAdjacentHTML`, `document.write`, `eval`).
+- **Architekturregel `teampanel/layers`** (`config/eslint-plugin-teampanel.js`): löst jeden Importpfad auf, auch
+  `./../`, `@/x/../y`, `export … from`, dynamisches `import()` und `import.meta.glob`, und prüft die Schichten
+  app → modules → platform → components → lib. Feature-Module dürfen sich nicht gegenseitig importieren. `..` in
+  Pfaden ist verboten (immer `@/`), dynamische Importe brauchen literale Pfade.
+- **i18n-Regel** prüft JSX-Text, Template-Literale und **alle** Attribute außer einer Liste technischer Attribute.
+  Neue Text-Props sind damit automatisch abgedeckt.
+- Die eigenen Regeln sind getestet (`tests/lint/`): isoliert und über die echte `eslint.config.js`.
 - Prettier (+ Tailwind-Klassensortierung). Markdown ist ausgenommen, die Doku ist von Hand formatiert.
 
 ### 0.2 Frontend-Gerüst
-- Tailwind CSS 4 + shadcn/ui (`components.json`, `Button` als Referenz; Standardhöhe 44 px für Touch, §45).
-- Design Tokens in `src/styles/tokens.css` (semantische Farben, Radius, Systemschrift ohne externes Font-CDN).
-  Dark-Mode-Werte vorbereitet, aber nicht aktiv.
-- React Router 8 (`/` Platzhalter, `*` 404, Error-Element), TanStack Query (Polling-Defaults gemäß E-35), i18next mit
-  typisierten Keys (`de.json`).
+- Tailwind CSS 4 + shadcn/ui (`components.json`, `Button` als Referenz; Standardhöhe 44 px für Touch, §45; sichtbarer
+  Fokusring auch im Forced-Colors-Modus).
+- **Design Tokens** in `src/styles/tokens.css`. Die Tailwind-Standardpalette ist entfernt (`--color-*: initial`),
+  daher existieren nur semantische Farben. Systemschrift ohne externes Font-CDN. Dark-Mode-Werte vorbereitet, aber
+  nicht aktiv.
+- React Router 8 (`/` Platzhalter, `*` 404, Error-Element); Seitentitel pro Seite, Fokus wandert nach Navigation auf
+  die neue Überschrift. TanStack Query (staleTime 30 s + Refetch bei Fensterfokus; Polling pro Query über
+  `POLL_INTERVAL_MS`, E-35). i18next mit typisierten Keys (`de.json`).
 - **Env-Schema** (`src/lib/env-schema.ts`, Zod): `VITE_APP_ENV`, `VITE_SUPABASE_URL`,
-  `VITE_SUPABASE_PUBLISHABLE_KEY`. Supabase hat die „anon keys“ durch „publishable keys“ ersetzt, alte anon-JWTs
-  werden weiter akzeptiert. Das Schema **lehnt Secret- und service_role-Keys ab** und verlangt `https` in Staging und
-  Production. Es läuft beim Build (der Build schlägt fehl) und beim App-Start (Konfigurationsfehlerseite).
-- `src/lib/supabase.ts` (nur Publishable Key, PKCE) und `src/lib/errors.ts` (SQLSTATE-/PostgREST-/`TP…`-Codes →
-  i18n-Keys).
-- Code-Splitting: `vendor-react` und `vendor` als langlebige Chunks.
+  `VITE_SUPABASE_PUBLISHABLE_KEY`. Supabase hat die „anon keys“ durch „publishable keys“ ersetzt. Das Schema ist eine
+  **Allowlist**: Es nimmt nur `sb_publishable_…` oder ein JWT mit der Rolle `anon` an und meldet Secret- und
+  service_role-Keys ausdrücklich. In Staging und Production ist `https` Pflicht. Geprüft wird beim Build (der Build
+  bricht ab) und beim App-Start (Konfigurationsfehlerseite). Die App liest nur diese drei Variablen.
+- `src/lib/supabase.ts` (nur Publishable Key, PKCE) und `src/lib/errors.ts`: SQLSTATE-, PostgREST- und `TP…`-Codes
+  werden zu i18n-Keys; Netzwerkfehler werden in allen supabase-js-Formen und Browser-Varianten erkannt.
+- Code-Splitting: `vendor-react` und `vendor` (entries-aware) als langlebige Chunks.
+- Dev-Server und Preview binden fest an `127.0.0.1`.
 - Sentry ist auf „vor Pilot“ verschoben, um in Phase 0 keine ungenutzte Abhängigkeit einzubauen.
 
 ### 0.3 Supabase
-- `supabase/config.toml`: E-Mail-Bestätigung an, Mindestpasswortlänge 10, `secure_password_change`, lokale
-  Redirect-URLs.
-- Migration `20261019150258_baseline.sql`: `citext` und `btree_gist` im Schema `extensions`; Schema `private`
-  (nicht exponiert); **Default Privileges**: neue Tabellen, Sequenzen und Funktionen in `public` gewähren
-  `anon`/`authenticated` nichts, Funktionen sind für `PUBLIC` nicht ausführbar; `private.set_updated_at()`.
-- `supabase/tests/database/000_guardrails.test.sql` (17 pgTAP-Assertions), die automatisch für **jede künftige**
-  Migration gelten: RLS auf allen Tabellen, keine Policies für `anon`/`public`, keine `FOR ALL`-Policies, Views nur
-  mit `security_invoker`, `anon` ohne Tabellen- und Funktionsrechte, `SECURITY DEFINER` nur mit `search_path`,
-  Mandantentabellen mit `unique (organization_id, id)` und Select-Policy, Probe-Objekte prüfen die Default Privileges.
-- `src/types/database.ts` mit postgres-meta v0.100.0 erzeugt (derselbe Generator, den die CLI 2.121 verwendet).
-  CI prüft die Aktualität.
-- `pnpm db:test:local`: Ersatz-Testlauf ohne Docker (Wegwerf-PostgreSQL + Supabase-Shim) für Umgebungen, in denen
-  die Supabase-Images nicht geladen werden können. Maßgeblich bleibt CI.
+- `supabase/config.toml`: E-Mail-Bestätigung an, Mindestpasswortlänge 10, `secure_password_change`,
+  `auto_expose_new_tables = false`, lokale Redirect-URLs.
+- Migration `20261019150258_baseline.sql`: `btree_gist` im Schema `extensions` (bewusst **kein `citext`**, E-38);
+  Schema `private` (nicht exponiert). **Default Privileges**: Neue Tabellen, Sequenzen und Funktionen in `public`
+  gewähren `anon`/`authenticated` nichts, `service_role` bekommt explizit Zugriff, Funktionen sind für `PUBLIC`
+  nicht ausführbar. Dazu `private.set_updated_at()`.
+- `supabase/tests/database/000_guardrails.test.sql` (21 pgTAP-Assertions), die automatisch für **jede künftige**
+  Migration gelten:
+  - RLS auf allen Tabellen; keine Policies für `anon`/`public`; keine `FOR ALL`-Policies
+  - Views nur mit `security_invoker`
+  - `anon` ohne Tabellen-, Spalten-, Sequenz- und Funktionsrechte; `authenticated` ohne
+    `TRUNCATE`/`REFERENCES`/`TRIGGER`
+  - `SECURITY DEFINER` nur mit `search_path = ''`
+  - Mandantentabellen mit `unique (organization_id, id)` und Select-Policy
+  - pgTAP auch als `authenticated` aufrufbar
+  - Probe-Objekte prüfen die Default Privileges
+- `src/types/database.ts` mit der gepinnten CLI 2.121 generiert (`pnpm db:types`, ohne Docker
+  `pnpm db:types:local`). Die Ausgabe ist identisch mit der CI-Generierung. Ein CLI-Update erfordert neues
+  Generieren.
+- `pnpm db:test:local`: Ersatz-Testlauf ohne Docker (Wegwerf-PostgreSQL + Supabase-Shim mit `supabase_admin` als
+  Superuser und `postgres` ohne Superuser-Rechte; Plan-Prüfung; transaktionale Migrationen). Maßgeblich bleibt CI.
 
 ### 0.4 Tests
-- Vitest + React Testing Library: Routing (Home, 404, Navigation), Konfigurationsfehlerseite, Env-Schema
-  (u. a. Ablehnung von Secret-Keys), Fehler-Mapping, Security-Header, ESLint-Architekturregeln: 36 Tests.
-- Playwright: Smoke-Tests auf **Desktop und Mobile** (Pixel 7), inkl. Prüfung der Touch-Zielgröße ≥ 44 px.
+- Vitest + React Testing Library (70 Tests):
+  - Routing inkl. Fokus nach Navigation, Konfigurationsfehlerseite
+  - Env-Schema (Allowlist, Secret-Keys), Fehler-Mapping (reale supabase-js-Fehlerformen)
+  - Security-Header
+  - Lint-Regeln: Architektur-Umgehungen, i18n, Security, echte Konfiguration
+- Playwright: Smoke-Tests auf **Desktop und Mobile** (Pixel 7). `vite preview` liefert dieselben Security-Header wie
+  das Deployment, und die Tests schlagen bei **CSP-Verstößen**, Konsolenfehlern und Touch-Zielen unter 44 px fehl.
 - pgTAP: Guardrails (siehe 0.3).
 
 ### 0.5 CI und Automatisierung
@@ -91,13 +116,14 @@ damit jede spätere Phase sofort Migrationen, Tests und UI hinzufügen kann. **K
 | Job | Schritte |
 |---|---|
 | `quality` | `format:check` → `lint` → `typecheck` → `test` |
-| `database` | `supabase start` (ohne nicht benötigte Dienste) → `supabase test db` → Typ-Drift-Check |
+| `database` | `supabase start` (nur benötigte Dienste) → `supabase test db` → Typ-Drift-Check |
 | `e2e` | Playwright (Desktop + Mobile), Report als Artefakt bei Fehlern |
-| `security` | gitleaks (gesamte Git-Historie), `pnpm audit --prod --audit-level high` (**blockierend**), Bundle-Scan auf Secret-/service_role-Keys |
+| `security` | gitleaks-CLI über die **gesamte** Git-Historie (`go install`, per Go-Checksum-DB verifiziert), `pnpm audit --prod --audit-level high` (blockierend), Build + Bundle-Scan auf Secrets |
 
-`deploy-database.yml` läuft nur manuell: DB-Tests erneut ausführen → `db push --dry-run` → `db push`, Production nur
-mit Freigabe. Dazu kommen `dependabot.yml` (npm gruppiert, GitHub Actions) und eine PR-Vorlage mit
-Definition-of-Done-Checkliste (§75).
+`deploy-database.yml` läuft nur manuell und nur vom Default-Branch: DB-Tests → Dry-Run (Job-Summary) → Apply.
+Production wird erst nach Freigabe angewendet, und der Freigebende sieht vorher den Dry-Run. Secrets stehen nur in den
+Schritten, die sie brauchen. Dazu kommen `dependabot.yml` (npm gruppiert, `@types/node` nur mit Node-Major,
+Actions gruppiert) und eine PR-Vorlage mit Definition-of-Done-Checkliste (§75).
 
 ### 0.6 Hosting
 - Security-Header werden beim Build als `dist/_headers` erzeugt (`config/security-headers.ts`), mit der CSP-Quelle der
@@ -107,17 +133,26 @@ Definition-of-Done-Checkliste (§75).
   pgTAP-Installation wurde aus Sicherheitsgründen nicht automatisch vorgenommen. Der Product Owner übernimmt sie
   selbst (Vorschlag im Phase-0-Bericht).
 
+### 0.7 Review
+Ein Review mit vier Reviewern und adversarialer Gegenprüfung über DB/Security, CI/CD, Frontend und Doku ergab
+48 bestätigte Befunde. Darunter waren 2 CI-Blocker: Host-Bindung `localhost` vs. `127.0.0.1` und abweichende
+Formatierung der generierten Typen. Alle Befunde mit Code-Bezug sind behoben. Was Konten des Product Owners braucht,
+ist unten als offen markiert.
+
 ### Abnahmekriterien Phase 0
 - [x] `pnpm check` lokal grün; `pnpm e2e` grün; DB-Guardrails grün (`pnpm db:test:local`).
 - [ ] CI auf GitHub grün (alle 4 Jobs), inklusive `supabase test db` gegen das echte Supabase-Image.
-- [x] Hartkodierter JSX-Text und Import `modules/alpha → modules/beta` lassen den Lint fehlschlagen (geprüft und
-      entfernt; dauerhaft abgesichert durch `tests/lint/`).
-- [x] Eine Migration mit Tabelle ohne RLS, `FOR ALL`-Policy, Definer-View und Definer-Funktion ohne `search_path`
-      lässt die Guardrails fehlschlagen (7 von 17 rot), ebenso eine Baseline ohne Default-Privilege-Härtung
-      (5 rot); eine regelkonforme Mandantentabelle besteht (geprüft und entfernt).
+- [x] Hartkodierter JSX-Text und Import `modules/alpha → modules/beta` lassen den Lint fehlschlagen (dauerhaft
+      abgesichert durch `tests/lint/`, inklusive Umgehungsversuchen).
+- [x] Verstöße gegen die DB-Regeln lassen die Guardrails fehlschlagen: Tabelle ohne RLS, `FOR ALL`-Policy,
+      Definer-View, `search_path`, Spalten-Grant an `anon`, Sequenz-Grant, `TRUNCATE` für `authenticated` und eine
+      Baseline ohne Härtung. Regelkonforme Objekte bestehen.
 - [x] Fehlendes `VITE_SUPABASE_URL` → Build bricht mit `VITE_SUPABASE_URL is missing (see .env.example)` ab;
       zur Laufzeit erscheint die Konfigurationsfehlerseite.
-- [x] Keine Secrets im Repo (gitleaks lokal über Arbeitsbaum und Historie grün).
+- [x] Keine Secrets im Repo (gitleaks über Arbeitsbaum und Historie, lokal und in CI).
+- [ ] **Staging eingerichtet** (§71): Supabase-Projekt, Cloudflare Preview, GitHub-Environments, Default-Branch
+      `main`. Braucht die Konten des Product Owners ([Umgebungen §2](architecture/umgebungen.md)).
+      Danach einmal *Deploy database → staging* ausführen.
 
 ---
 
@@ -201,7 +236,7 @@ eigenes Team. E2E-Flow 1 (Rest).
 
 ## Phase 9 – Urlaub und Abwesenheit
 
-**Umfang:** `leave_types` (Seed), `leave_requests`, View `absences_public`. Antrag (mobil), Stornieren, Genehmigen und
+**Umfang:** `leave_types` (Seed), `leave_requests`, RPC `absences_in_scope` (Abwesenheiten ohne Typ für Kollegen). Antrag (mobil), Stornieren, Genehmigen und
 Ablehnen mit Kommentar, Krankmeldung (E-23). Abwesenheiten im Dienstplan mit Konfliktmarkierung. Widget
 „Urlaubsanträge“.
 **Tests:** Überschneidung, halber Tag, sensible Typen für Kollegen nicht erkennbar, Genehmigung im Scope.
@@ -244,7 +279,7 @@ Streaming, hinter `reports.export` + `export_enabled`. Owner-Export für deaktiv
 ## Phase 15 – Security Hardening
 
 **Umfang:** RLS-Audit (jede Policy gegen die Matrix), Permission-Audit, Rate-Limits, File-Security, Auth-Härtung
-(Neubewertung von E-24), `pnpm audit`, Secret-Audit, Privacy Review (Datenflüsse, Löschkonzept, Aufbewahrung),
+(Neubewertung von E-24), `pnpm audit`, GitHub Actions auf Commit-SHAs pinnen (Dependabot pflegt sie), Secret-Audit, Privacy Review (Datenflüsse, Löschkonzept, Aufbewahrung),
 Restore-Test des Backups, Load-Test der RLS-Helper mit 100 Mitgliedern × 1 Jahr Daten.
 
 ## Phase 16 – Pilot

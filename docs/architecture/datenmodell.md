@@ -14,7 +14,7 @@
 | Zeitpunkte | `timestamptz`; reine Kalendertage als `date` |
 | Zeitstempel | `created_at timestamptz not null default now()`, `updated_at` per Trigger `private.set_updated_at()` |
 | Status-/Enum-Felder | `text` + `CHECK (status in (...))` statt Postgres-`enum`, weil Migrationen damit einfacher bleiben (§50 „gültige Statuswerte“) |
-| E-Mail | `citext` (Vergleich ohne Groß-/Kleinschreibung) |
+| E-Mail | `text` mit `CHECK (email = lower(btrim(email)))`. Eingaben werden in RPCs mit `lower(btrim(...))` normalisiert, Vergleiche mit `auth.users.email` immer über `lower(...)`. **Kein `citext`**: In `search_path = ''`-Funktionen fallen seine Operatoren still auf case-sensitiven `text`-Vergleich zurück (E-38). |
 | Löschen | Mandantendaten werden archiviert (`status = 'archived'` / `archived_at`), nicht gelöscht. Physische Löschung nur über kontrollierte Jobs (Organisation löschen, DSGVO). FKs auf Mandantendaten: `on delete restrict`, außer bei reinen Kind-Tabellen (`cascade`). |
 | Indizes | Jede FK-Spalte ist indiziert. Zusätzlich gibt es zusammengesetzte Indizes für die Hauptabfragen (unten pro Tabelle). |
 | Namen | Tabellen im Plural, `snake_case`. „Mitarbeiter“ heißt im Code durchgängig **membership** (`membership_id`), nicht `employee_id` (E-04). |
@@ -65,7 +65,7 @@ Globale Account-Daten. Firmenbezogene Namen stehen in `memberships`.
 | Spalte | Typ | Regeln |
 |---|---|---|
 | id | uuid PK | |
-| slug | citext | unique, `^[a-z0-9-]{3,48}$`, für URLs |
+| slug | text | unique, `^[a-z0-9-]{3,48}$` (nur Kleinbuchstaben), für URLs |
 | name | text | not null, 1–120 |
 | industry | text | null (Freitext/Katalog, nur Statistik) |
 | country | text | not null, ISO-3166-1 alpha-2, default `'AT'` |
@@ -106,7 +106,7 @@ Globale Account-Daten. Firmenbezogene Namen stehen in `memberships`.
   in `employee_profiles`.
 
 ### employee_profiles (1:1 zu memberships, HR-/Kontaktdaten)
-`membership_id (PK, FK (organization_id, membership_id)), organization_id, email citext, phone, personnel_number, entry_date date`
+`membership_id (PK, FK (organization_id, membership_id)), organization_id, email text (normalisiert), phone, personnel_number, entry_date date`
 - unique `(organization_id, email) where email is not null`
 - unique `(organization_id, personnel_number) where personnel_number is not null`
 - Lesen: eigene Zeile oder `employees.view.team/all` im Scope. Schreiben: `employees.edit` im Scope; eigene
@@ -128,7 +128,7 @@ unique `(membership_id) where is_primary`
 | Spalte | Regeln |
 |---|---|
 | id, organization_id, membership_id | FK auf die `invited`-Membership |
-| email citext | not null |
+| email text | not null, normalisiert (`lower(btrim(...))`) |
 | token_hash bytea | unique; nur der SHA-256-Hash wird gespeichert, der Klartext-Token steht nur in der E-Mail bzw. im Link |
 | expires_at | default `now() + 7 days` |
 | accepted_at, revoked_at | null |
@@ -282,7 +282,9 @@ Protokoll der Veröffentlichung und Anker für die Benachrichtigungen.
 - **Keine Überschneidung:** `EXCLUDE USING gist (membership_id WITH =, daterange(start_date, end_date, '[]') WITH &&) WHERE (status in ('pending','approved'))`
 - Index `(organization_id, status)`, `(membership_id, start_date)`
 - Sensible Typen: Für Kollegen ohne `leave.approve` im Scope wird nur „abwesend“ angezeigt (eigene View
-  `absences_public` ohne Typ und Kommentar)
+  ist eine `SECURITY DEFINER`-RPC `absences_in_scope(from, to)` mit `search_path = ''` und Scope-Prüfung, die nur
+  `membership_id` und Zeitraum liefert. Views laufen immer mit `security_invoker` (Guardrail) und können daher keine
+  gefilterte Sicht auf sonst gesperrte Zeilen bieten.)
 
 ## 7. Aufgaben und Checklisten
 

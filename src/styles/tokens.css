@@ -15,7 +15,9 @@
   --card-foreground: oklch(0.21 0.02 257);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.02 257);
-  --primary: oklch(0.47 0.11 236);
+  --primary: oklch(
+    0.47 0.11 236
+  ); /* ≈ #006390 — keep <meta name="theme-color"> in index.html in sync */
   --primary-foreground: oklch(0.985 0.003 247);
   --secondary: oklch(0.95 0.01 247);
   --secondary-foreground: oklch(0.27 0.03 257);

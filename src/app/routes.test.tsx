@@ -15,6 +15,9 @@ describe('app routes', () => {
     expect(screen.getByRole('heading', { name: 'Seite nicht gefunden' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('link', { name: 'Zur Startseite' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'TeamPanel' })).toBeInTheDocument();
+    const heading = screen.getByRole('heading', { level: 1, name: 'TeamPanel' });
+    expect(heading).toBeInTheDocument();
+    // Focus follows client-side navigation to the new page heading.
+    expect(heading).toHaveFocus();
   });
 });

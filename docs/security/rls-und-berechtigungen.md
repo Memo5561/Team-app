@@ -19,14 +19,21 @@
    eine Tabelle ohne RLS existiert.
 2. **Keine Policy = kein Zugriff.** Policies werden pro Operation (`select`/`insert`/`update`/`delete`) und nur für
    die Rolle `authenticated` geschrieben. Nie `for all`, nie `to public`.
-3. **`anon` bekommt nichts:** `revoke all on all tables in schema public from anon` plus Default Privileges. Supabase
-   vergibt standardmäßig Rechte an `anon`/`authenticated`; das wird in der Baseline-Migration zurückgenommen und
-   pro Tabelle explizit für `authenticated` gegrantet.
-4. **Funktionen:** `revoke execute on all functions … from public`. RPCs werden einzeln an `authenticated` gegrantet.
-   `SECURITY DEFINER` nur mit `set search_path = ''` und voll qualifizierten Namen. Helper liegen im nicht exponierten
-   Schema `private`.
-5. **Service-Role-Key** existiert nur in Edge Functions und CI-Secrets. Das Frontend-Bundle wird in CI auf
-   `service_role` und `sk_live`/`sk_test` gescannt.
+3. **`anon` bekommt nichts, `authenticated` nur explizit:** Supabase vergibt standardmäßig volle Rechte an
+   `anon`/`authenticated` auf neue Objekte in `public`. Die Baseline-Migration nimmt das über Default Privileges zurück
+   (zusätzlich `auto_expose_new_tables = false`). Jede Tabelle bekommt ihre Grants an `authenticated` explizit, und nur
+   `select/insert/update/delete`, nie `truncate/references/trigger`. `service_role` erhält Zugriff explizit über die
+   Baseline, unabhängig von der Projekteinstellung.
+4. **Funktionen:** Die Baseline entzieht `PUBLIC` das Ausführungsrecht für alle künftigen Funktionen der Rolle
+   `postgres`, **in allen Schemas**, auch für Extensions, die `postgres` später installiert. RPCs werden einzeln an
+   `authenticated` gegrantet. `SECURITY DEFINER` nur mit exakt `set search_path = ''` und voll qualifizierten Namen.
+   Helper liegen im nicht exponierten Schema `private`.
+   **Achtung bei Extension-Typen:** Operatoren von Extensions (z. B. `citext`) werden in `search_path = ''`-Funktionen
+   nicht gefunden. Postgres fällt dann still auf Basistyp-Operatoren zurück. Deshalb kein `citext` (E-38); falls
+   Extension-Operatoren nötig sind, nur mit `OPERATOR(extensions.=)` und einem eigenen Test.
+5. **Service-Role-/Secret-Key** existiert nur in Edge Functions und CI-Secrets. Das Env-Schema akzeptiert im Frontend
+   nur Publishable/anon-Keys. Das Frontend-Bundle wird in CI auf service_role-JWTs, `sb_secret_`, `sbp_`, Stripe-,
+   Resend- und Postgres-Zugangsdaten gescannt.
 6. **Mandantenkonsistenz** über zusammengesetzte FKs (siehe [Datenmodell](../architecture/datenmodell.md#1-konventionen)).
 7. **Unveränderliche Spalten** (`organization_id`, `membership_id` bei Events, `created_by_*`) werden per Trigger
    gegen UPDATE geschützt.
@@ -215,12 +222,16 @@ gemappt (§61).
 **Werkzeug:** pgTAP via `supabase test db` (läuft in CI gegen eine frische lokale DB). Helper
 `tests.as_user(email)` setzt `role authenticated` und `request.jwt.claims`.
 
-**Meta-Tests** (fangen vergessene Policies bei *künftigen* Tabellen ab):
+**Guardrails** (`supabase/tests/database/000_guardrails.test.sql`, fangen Fehler bei *künftigen* Objekten ab):
 - Jede Tabelle in `public` hat RLS aktiviert.
 - Jede Tabelle mit Spalte `organization_id` hat `unique (organization_id, id)` und mindestens eine Select-Policy.
-- Keine Policy richtet sich an `anon` oder `public`.
-- Jede `SECURITY DEFINER`-Funktion hat einen gesetzten `search_path`.
-- `anon` hat auf keiner Tabelle Privilegien.
+- Keine Policy richtet sich an `anon` oder `public`, keine nutzt `FOR ALL`.
+- Jede View läuft mit `security_invoker`.
+- Jede `SECURITY DEFINER`-Funktion setzt `search_path = ''`.
+- `anon` hat keine Tabellen-, Spalten-, Sequenz- oder Funktionsrechte; `authenticated` nie
+  `TRUNCATE`/`REFERENCES`/`TRIGGER`.
+- Default Privileges (Probe-Objekte): neu = zu für `anon`/`authenticated`, offen für `service_role`.
+- pgTAP ist als `authenticated` aufrufbar (Voraussetzung für RLS-Tests mit Rollenwechsel).
 
 **Isolationsmatrix** (pro Mandantentabelle, wächst mit jeder Phase), Seed mit „Demo GmbH“ und „Fremd AG“:
 

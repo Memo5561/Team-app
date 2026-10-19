@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Applies supabase/migrations + seed to a throwaway local PostgreSQL cluster and runs the pgTAP
-# tests in supabase/tests/database. Fallback for environments where the Supabase Docker images
-# cannot be pulled (e.g. restricted cloud sessions). CI runs `supabase test db` against the real
-# Supabase image and remains authoritative; see scripts/local-db/supabase-shim.sql for the shim.
+# tests below supabase/tests. Fallback for environments where the Supabase Docker images cannot be
+# pulled (e.g. restricted cloud sessions). CI runs `supabase test db` against the real Supabase
+# image and remains authoritative; see scripts/local-db/supabase-shim.sql for what is emulated.
+#
+# Usage: db-test-local.sh            run all pgTAP tests
+#        db-test-local.sh --types    regenerate src/types/database.ts instead (pinned Supabase CLI)
 set -euo pipefail
+
+MODE="test"
+if [[ "${1:-}" == "--types" ]]; then MODE="types"; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PG_BIN="${PG_BIN:-$(find /usr/lib/postgresql -maxdepth 2 -name bin -type d 2>/dev/null | sort -V | tail -n 1)}"
@@ -21,7 +27,7 @@ fi
 WORK="$(mktemp -d)"
 chmod 755 "$WORK"
 
-# initdb/postgres refuse to run as root; only the server runs as the postgres user.
+# initdb/postgres refuse to run as root; only the server runs as the postgres OS user.
 as_server_user() {
   if [[ "$(id -u)" -eq 0 ]]; then runuser -u postgres -- "$@"; else "$@"; fi
 }
@@ -33,33 +39,48 @@ cleanup() {
 }
 trap cleanup EXIT
 
-as_server_user "$PG_BIN/initdb" -D "$WORK/data" -U postgres --auth=trust --no-sync -E UTF8 >/dev/null
+# Like the Supabase image: the bootstrap superuser is supabase_admin, `postgres` is not a superuser.
+as_server_user "$PG_BIN/initdb" -D "$WORK/data" -U supabase_admin --auth=trust --no-sync -E UTF8 >/dev/null
 as_server_user "$PG_BIN/pg_ctl" -D "$WORK/data" -l "$WORK/postgres.log" -w \
-  -o "-k $WORK -p $PORT -c listen_addresses=''" start >/dev/null
+  -o "-k $WORK -p $PORT -c listen_addresses=127.0.0.1" start >/dev/null
 
-psql_run() {
-  "$PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -h "$WORK" -p "$PORT" -U postgres -d postgres "$@"
+psql_as() {
+  local role="$1"
+  shift
+  "$PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -h "$WORK" -p "$PORT" -U "$role" -d postgres "$@"
 }
 
-psql_run -f "$ROOT/scripts/local-db/supabase-shim.sql"
+psql_as supabase_admin -f "$ROOT/scripts/local-db/supabase-shim.sql"
 for migration in "$ROOT"/supabase/migrations/*.sql; do
   echo "migrate  $(basename "$migration")"
-  psql_run -f "$migration"
+  psql_as postgres --single-transaction -f "$migration"
 done
-psql_run -f "$ROOT/supabase/seed.sql"
+psql_as postgres --single-transaction -f "$ROOT/supabase/seed.sql"
+
+if [[ "$MODE" == "types" ]]; then
+  bash "$ROOT/scripts/gen-db-types.sh" --db-url "postgresql://postgres@127.0.0.1:$PORT/postgres?sslmode=disable"
+  exit 0
+fi
 
 failed=0
-for test_file in "$ROOT"/supabase/tests/database/*.test.sql; do
-  name="$(basename "$test_file")"
-  if ! output="$(psql_run -t -A -f "$test_file" 2>&1)"; then
+while IFS= read -r test_file; do
+  name="${test_file#"$ROOT/"}"
+  if ! output="$(psql_as postgres -t -A -f "$test_file" 2>&1)"; then
     printf '%s\nFAIL     %s (SQL error)\n' "$output" "$name"
     failed=1
-  elif grep -qE '^(not ok|# Looks like)' <<<"$output"; then
+    continue
+  fi
+  planned="$(grep -oE '^1\.\.[0-9]+$' <<<"$output" | head -n 1 | cut -d. -f3 || true)"
+  ran="$(grep -cE '^(ok|not ok) ' <<<"$output" || true)"
+  if grep -qE '^(not ok|# Looks like)' <<<"$output"; then
     printf '%s\nFAIL     %s\n' "$output" "$name"
     failed=1
+  elif [[ -z "$planned" || "$planned" != "$ran" ]]; then
+    printf '%s\nFAIL     %s (planned %s, ran %s)\n' "$output" "$name" "${planned:-none}" "$ran"
+    failed=1
   else
-    echo "ok       $name ($(grep -c '^ok' <<<"$output") assertions)"
+    echo "ok       $name ($ran assertions)"
   fi
-done
+done < <(find "$ROOT/supabase/tests" -type f \( -name '*.sql' -o -name '*.pg' \) | sort)
 
 exit "$failed"

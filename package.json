@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.28.0",
   "engines": {
-    "node": ">=22.22.0"
+    "node": ">=22.22.2"
   },
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,8 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "db:test:local": "bash scripts/db-test-local.sh",
-    "db:types": "supabase gen types typescript --local --schema public > src/types/database.ts && prettier --write src/types/database.ts"
+    "db:types": "bash scripts/gen-db-types.sh",
+    "db:types:local": "bash scripts/db-test-local.sh --types"
   },
   "dependencies": {
     "@radix-ui/react-slot": "1.5.0",
@@ -49,6 +50,7 @@
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.8",
+    "@types/estree": "1.0.9",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
