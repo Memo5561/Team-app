@@ -4,5 +4,6 @@ coverage/
 playwright-report/
 test-results/
 supabase/.temp/
+graphify-out/
 # Documentation is hand-formatted (German prose, aligned tables).
 *.md
