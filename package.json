@@ -17,6 +17,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "e2e": "playwright test",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "check:bundle": "node scripts/check-bundle-secrets.mjs dist",
@@ -26,9 +27,11 @@
     "db:test": "supabase test db",
     "db:test:local": "bash scripts/db-test-local.sh",
     "db:types": "bash scripts/gen-db-types.sh",
-    "db:types:local": "bash scripts/db-test-local.sh --types"
+    "db:types:local": "bash scripts/db-test-local.sh --types",
+    "supabase:env": "node scripts/supabase-env.mjs"
   },
   "dependencies": {
+    "@hookform/resolvers": "5.9.2",
     "@radix-ui/react-slot": "1.5.0",
     "@supabase/supabase-js": "2.118.0",
     "@tanstack/react-query": "5.104.4",
@@ -37,6 +40,7 @@
     "i18next": "26.5.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-hook-form": "7.90.0",
     "react-i18next": "17.1.0",
     "react-router": "8.5.0",
     "tailwind-merge": "3.7.0",

@@ -1,7 +1,7 @@
 # TeamPanel – Implementierungsplan V1
 
-> Status: **Freigegeben am 2026-10-19**, Phase 0 abgeschlossen · Basis: §70/§71 der [Spezifikation](product/spezifikation.md), angepasst gemäß
-> [E-26](architecture/entscheidungen-und-risiken.md#e-26--phasenreihenfolge-der-spec-hat-lücken).
+> Status: **Freigegeben am 2026-10-19**, Phase 0 abgeschlossen, Phase 1 in Umsetzung · Basis: §70/§71 der
+> [Spezifikation](product/spezifikation.md), angepasst gemäß [E-26](architecture/entscheidungen-und-risiken.md#e-26--phasenreihenfolge-der-spec-hat-lücken).
 >
 > Jede Phase folgt dem Ablauf aus §90 (Analyse → Plan → Datenmodell/Permissions → Tests definieren → Implementieren →
 > Tests → Security → UI/UX → Doku) und endet mit einem Checkpoint im Format aus §91.
@@ -9,10 +9,10 @@
 
 ## Phasenübersicht
 
-| Phase | Inhalt | Abweichung zur Spec | Relevante 🟥-Entscheidungen (alle getroffen am 2026-10-19) |
+| Phase | Inhalt | Abweichung zur Spec | Relevante 🟥-Entscheidungen (getroffen am 2026-10-19, außer „offen“) |
 |---|---|---|---|
 | 0 | Repository-Fundament | + i18n, Design Tokens, Fehler-Mapping, DB-Baseline, Meta-Tests | – |
-| 1 | Auth | | – |
+| 1 | Auth | | E-43, E-44, E-46 |
 | 2 | Organisationen + Mandanten-Fundament | + Audit-Infrastruktur, Entitlement-Lesen (Free-Plan), Onboarding Schritte 2–3 | E-37 |
 | 3 | Rollen und Berechtigungen | Scopes, Eskalationsschutz | E-02, E-11 |
 | 4 | Mitarbeiter, Teams, Standorte, Einladungen | + E-Mail-Outbox/Resend, Onboarding Schritte 5–6 | E-04, E-05 |
@@ -175,14 +175,135 @@ Konten des Product Owners braucht, ist unten als offen markiert.
 
 ## Phase 1 – Auth
 
-**Umfang:** Registrierung (Name, E-Mail, Passwort), Magic Link, E-Mail-Bestätigung, Login, Logout (lokal und
-„überall“), Passwort vergessen/zurücksetzen, Session-Handling (Refresh, abgelaufene Session), Protected Routes,
-Tabelle `profiles` (Trigger bei Sign-up).
-**DB/Security:** `profiles` mit RLS (nur eigene Zeile). Auth-Rate-Limits konfiguriert. Keine Organisationen.
-**Tests:** Unit (Formular-Schemas), Integration (Sign-up → Profil existiert; fremdes Profil nicht lesbar), E2E
-(Registrieren über Mailpit-Link → Login → Logout).
-**Abnahme:** Alle Auth-Flows mobil und auf dem Desktop bedienbar, mit Lade-, Fehler- und Leerzuständen; Fehlertexte
-auf Deutsch, keine Rohfehler.
+**Status: in Umsetzung (seit 2026-10-19).** Noch nicht auf Staging eingespielt. Ziel: Konto anlegen, anmelden,
+abmelden und Passwort zurücksetzen, mobil und auf dem Desktop. **Keine Organisationen** (Phase 2).
+
+**Entscheidungen des Product Owners (2026-10-19):**
+- **Registrierung ohne Passwort**
+  ([E-43](architecture/entscheidungen-und-risiken.md#e-43--registrierung-ohne-passwort)): Name und E-Mail sind
+  Pflicht, das Konto entsteht immer über den Link in der Bestätigungs-E-Mail. Ein Passwort ist optional und wird erst
+  nach der Bestätigung festgelegt. Die Roadmap nannte bisher nur „Name, E-Mail, Passwort“, §9 erlaubt „Passwort oder
+  Magic Link“.
+- **Kein Passwort aus der Zeit vor der Bestätigung**
+  ([E-46](architecture/entscheidungen-und-risiken.md#e-46--fremdes-passwort-in-einem-unbestätigten-konto),
+  Option 1): Sonst könnte jemand ein Konto mit fremder Adresse und eigenem Passwort vorab anlegen, das die echte
+  Person später per Link bestätigt. Deshalb kein Passwortfeld bei der Registrierung, und ein Trigger löscht ein vorher
+  gesetztes Passwort bei der ersten Bestätigung (auch bei direkten API-Aufrufen). Akzeptiertes Restrisiko: Ein vom
+  Angreifer gewählter Name bleibt im Profil, bis es eine Profilseite gibt.
+- **E-Mail in Staging über den Supabase-Standardversand**
+  ([E-44](architecture/entscheidungen-und-risiken.md#e-44--e-mail-versand-in-staging-bis-phase-4)): nur an Adressen
+  aus dem Supabase-Team (auch mit +Label), rund 2 E-Mails pro Stunde. Resend bleibt in Phase 4.
+- Dazu: „Require current password when updating“ ist in den gehosteten Projekten an, lokal aus
+  ([E-45](architecture/entscheidungen-und-risiken.md#e-45--bewusst-akzeptierte-auth-restrisiken)).
+
+### 1.1 Datenbank
+- Migration `20261019185317_profiles.sql`: `public.profiles` (1:1 zu `auth.users`, kein Mandant) mit CHECKs für
+  Name und Sprache. RLS an, Policy `profiles_select_own` (nur die eigene Zeile), für `authenticated` nur `SELECT`.
+  Details: [Datenmodell §3](architecture/datenmodell.md).
+- Trigger `on_auth_user_created` → `private.handle_new_user()` (`SECURITY DEFINER`, `search_path = ''`): legt das
+  Profil aus den Sign-up-Metadaten (`display_name`, `locale`) an. Die Metadaten kommen vom Client und gelten als
+  unsicher; ungültige Werte führen zu Fallbacks, nie zu einem Fehler beim Sign-up. Schon vorhandene Konten bekommen
+  ihr Profil per Backfill in derselben Migration.
+- Migration `20261019204325_clear_password_before_first_confirmation.sql` (E-46): Trigger
+  `on_auth_user_first_confirmation` (`BEFORE UPDATE` auf `auth.users`, ohne Spaltenliste) →
+  `private.clear_password_before_first_confirmation()` (`SECURITY DEFINER`, `search_path = ''`). Wird ein Konto zum
+  ersten Mal bestätigt, nachdem eine Bestätigungs-E-Mail verschickt wurde, setzt er `encrypted_password` auf `NULL`.
+  Konten aus `admin.createUser` (bestätigt angelegt) und Passwörter, die nach der Bestätigung gesetzt werden,
+  bleiben. Details: [Datenmodell §3](architecture/datenmodell.md).
+- `src/types/database.ts` neu generiert (die zweite Migration ändert daran nichts).
+
+### 1.2 Supabase Auth und E-Mails
+- Deutsche E-Mail-Vorlagen in `supabase/templates/` (Bestätigung, Anmeldelink, Passwort zurücksetzen,
+  E-Mail-Änderung, Bestätigungscode), in `supabase/config.toml` verdrahtet. Alle Links zeigen auf
+  `{{ .SiteURL }}/auth/confirm?token_hash=…&type=…`. Die App übergibt nie `redirectTo`/`emailRedirectTo`.
+- Client: PKCE bleibt, `detectSessionInUrl: false` (die App liest keine Tokens automatisch aus der URL).
+- Lokal `max_frequency = "1s"`, damit Tests mehrere Mails hintereinander auslösen können (gehostet 60 s).
+- Rate-Limits: Supabase-Defaults (pro IP). Kein CAPTCHA, keine Kontosperre (E-45).
+- Gehostete Projekte lesen `config.toml` nicht. Vorlagen und Einstellungen trägt der Product Owner laut
+  [Umgebungen §2.4](architecture/umgebungen.md#24-auth-einstellungen-stagingproduction) ein.
+
+### 1.3 Frontend
+| Route | Zugang |
+|---|---|
+| `/login`, `/signup` | nur ohne Sitzung; mit Sitzung weiter zu `next` bzw. `/` (`requireGuest`) |
+| `/auth/confirm` | immer (Ziel aller E-Mail-Links) |
+| `/forgot-password` | immer (auch angemeldet, z. B. nach dem Hinweis „Passwort gilt nicht mehr als sicher“) |
+| `/` (Start), `/reset-password` | nur mit Sitzung, sonst `/login?next=…` (`requireSession`); `/reset-password` zusätzlich nur mit einer Sitzung aus einem E-Mail-Link (zwei Modi: „Neues Passwort festlegen“ nach einem Recovery-Link, „Passwort festlegen“ nach der ersten Bestätigung) |
+| `*` | 404, öffentlich |
+
+- **Registrierung:** nur Name und E-Mail, immer `signInWithOtp` (`shouldCreateUser: true`). Danach „Prüfe dein
+  Postfach“.
+- **Erste Bestätigung → „Passwort festlegen“** (E-46): Hat der Link das Konto zum ersten Mal bestätigt (erkannt an
+  Server-Zeitstempeln der `/verify`-Antwort, `src/platform/auth/first-confirmation.ts`), führt `/auth/confirm` zu
+  `/reset-password` im Einrichtungsmodus. Passwort zweimal eingeben (mindestens 10 Zeichen, höchstens 72 Byte) →
+  Start mit „Passwort festgelegt …“, oder „Überspringen“ → Start ohne Passwort (kein API-Aufruf). Spätere
+  Anmeldelinks führen direkt zum Start.
+- **Anmelden:** mit Passwort oder per „Anmeldelink per E-Mail“. Bei unbestätigter Adresse: „Bestätigungs-E-Mail
+  erneut senden“. Gilt das Passwort nach dem Login als unsicher, gibt es nur einen Hinweis (mit Link „Passwort
+  ändern“ zu `/forgot-password`).
+- **Passwort vergessen → zurücksetzen:** Link per E-Mail, auf `/reset-password` das neue Passwort zweimal eingeben.
+  Danach werden die anderen Geräte abgemeldet (`signOut({ scope: 'others' })`). Funktioniert auch für Konten ohne
+  Passwort (erstes Passwort), z. B. nach „Überspringen“.
+- **`/auth/confirm`:** Der Token verschwindet sofort aus Adresszeile und Verlauf und wird erst nach Klick auf
+  „Weiter“ eingelöst (Schutz vor Link-Scannern in Postfächern). Ist schon jemand angemeldet, wird diese Sitzung
+  vorher lokal beendet.
+- **Start `/`:** Begrüßung mit dem Namen aus `profiles`, Leerzustand „Noch kein Unternehmen“, „Abmelden“ (`local`)
+  und „Überall abmelden“ (`global`).
+- **Sitzung endet von außen** (anderer Tab, anderes Gerät, abgelaufen): `/login?reason=signedOut&next=…` mit Hinweis.
+- **Neutrale Antworten:** Registrierung, Anmeldelink, Passwort vergessen und erneutes Senden zeigen immer denselben
+  Zustand, auch bei `user_already_exists`, `email_exists`, `otp_disabled` und `over_email_send_rate_limit`. Die UI
+  verrät so nicht, ob es ein Konto gibt.
+- `src/lib/safe-redirect.ts` (`next` nur als relativer Pfad derselben Origin); `src/lib/errors.ts` übersetzt
+  Auth-Fehler anhand von `code` (nie `message`) in deutsche Texte.
+- `src/platform/auth`: einziger Zugriff auf `supabase.auth` (`api.ts`), `AuthProvider`, Hooks, Formular-Schemas
+  (Zod, Meldungen als i18n-Keys) und Formulare (React Hook Form). Neue UI-Bausteine in `src/components/ui`: Input,
+  Label, Field, Alert, Card, PasswordInput, Spinner (Touch-Ziele 44 px).
+
+**Nicht in Phase 1:** Profil bearbeiten, E-Mail-Adresse ändern (die Vorlage existiert schon), Konto löschen, MFA,
+CAPTCHA.
+
+### 1.4 Tests
+- **pgTAP** `010_profiles.test.sql` (79 Assertions): Struktur, CHECKs, Rechte, Policy, Trigger-Fälle (fehlende,
+  ungültige oder zu lange Metadaten, Steuerzeichen, unbekannte Sprache), RLS mit zwei Nutzern und `anon`, Cascade.
+  Die Guardrails (22) gelten auch für `profiles`. Neue Helfer in `supabase/tests/helpers/auth.psql`
+  ([Sicherheitsmodell §9](security/rls-und-berechtigungen.md#9-teststrategie-sicherheit)).
+- **pgTAP** `020_auth_users_password_guard.test.sql` (25 Assertions, E-46): Trigger und Funktion (Struktur,
+  `SECURITY DEFINER`, `search_path`, keine Rechte für `anon`/`authenticated`); Passwort gelöscht bei der ersten
+  Bestätigung (Registrierung mit Passwort, per Link, über einen Recovery-Link); Passwort bleibt bei `admin.createUser`,
+  Einladung, schon bestätigten Konten, Updates vor der Bestätigung und einem Passwort nach der Bestätigung. Zusätzlich
+  als `supabase_auth_admin`, wo die DB den Rollenwechsel erlaubt. Insgesamt 126 Assertions in drei Dateien.
+- **Unit** (Vitest): Formular-Schemas, `safe-redirect`, Fehler-Mapping, Auth-API und Provider, Guards und alle
+  Auth-Seiten (mit gemocktem `@/lib/supabase`), dazu die Erkennung der ersten Bestätigung und der Einrichtungsmodus
+  von `/reset-password` („Überspringen“ ohne API-Aufruf).
+- **Integration** (Vitest in Node, `tests/integration`, echtes lokales Supabase im CI-Job `database`): Sign-up →
+  Profil existiert; fremdes Profil nicht lesbar; Abmelden lokal und global. E-46
+  (`password-guard.test.ts`): Ein Passwort von vor der Bestätigung gilt danach nicht, weder nach der vom Angreifer
+  ausgelösten Mail noch nach einer späteren Registrierung der echten Person per Link, dem Anmeldelink von `/login`
+  oder „Passwort vergessen“. Passwörter aus
+  `admin.createUser` und nach der Bestätigung gesetzte funktionieren. Der Name des Angreifers bleibt (Restrisiko).
+- **E2E** (Playwright, Desktop + Pixel 7, Tag `@supabase`, E-Mails über Mailpit):
+  - Registrieren (nur Name und E-Mail), den Link in einem **neuen** Browser-Kontext öffnen (anderes Gerät) →
+    „Passwort festlegen“ → Logout → Login mit dem Passwort
+  - „Überspringen“: Passwort-Login scheitert, Anmeldelink funktioniert
+  - E-46: Registrierung per API mit fremdem Passwort, Bestätigung in der App → dieses Passwort gilt nicht
+  - Anmeldelink; Passwort vergessen → zurücksetzen
+  - bereits benutzter und ungültiger Link
+  - geschützte Route → Login → zurück zu `next`
+
+  Die Smoke-Tests laufen weiterhin ohne Supabase, neu mit gemockter erster Bestätigung → „Passwort festlegen“ →
+  „Überspringen“ und einem späteren Anmeldelink, der direkt zum Start führt (360 px).
+
+### Abnahmekriterien Phase 1
+- [ ] `pnpm check`, `pnpm e2e` und `pnpm db:test:local` lokal grün.
+- [ ] CI grün (alle Jobs), inklusive pgTAP, Integrationstests und `@supabase`-E2E gegen das echte Supabase-Image.
+- [ ] Alle Auth-Flows mobil und auf dem Desktop bedienbar, mit Lade-, Fehler- und Leerzuständen; Fehlertexte auf
+      Deutsch, keine Rohfehler.
+- [ ] Fremdes Profil nicht lesbar, keine Schreibrechte auf `profiles` (pgTAP und Integration).
+- [ ] E-46 umgesetzt: kein Passwortfeld bei der Registrierung, optionaler Schritt „Passwort festlegen“, Trigger auf
+      `auth.users` (pgTAP `020`, Integration und E2E grün in CI).
+- [ ] Staging: beide Migrationen per *Deploy database* eingespielt, Vorlagen und Auth-Einstellungen laut
+      [Umgebungen §2.4](architecture/umgebungen.md#24-auth-einstellungen-stagingproduction) gesetzt, manueller Test
+      bestanden (inklusive der Nachweise für E-46 und „Require current password when updating“).
 
 ## Phase 2 – Organisationen und Mandanten-Fundament
 

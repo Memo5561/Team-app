@@ -9,6 +9,9 @@ let client: TeamPanelClient | undefined;
 /**
  * Browser Supabase client. Uses only the publishable key; every request is authorized by RLS
  * with the user's JWT. The service-role key must never reach the frontend.
+ *
+ * All auth e-mail links carry a `token_hash` that /auth/confirm verifies explicitly after a click
+ * (protection against link scanners), so the client must not consume tokens from the URL itself.
  */
 export function getSupabase(): TeamPanelClient {
   if (client === undefined) {
@@ -18,7 +21,7 @@ export function getSupabase(): TeamPanelClient {
         flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
       },
     });
   }

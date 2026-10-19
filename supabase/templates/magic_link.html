@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <title>Dein Anmeldelink</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f8fafc;
+      color: #121922;
+      font-family:
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        'Segoe UI',
+        Roboto,
+        'Helvetica Neue',
+        Arial,
+        sans-serif;
+    "
+  >
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #f8fafc"
+    >
+      <tr>
+        <td align="center" style="padding: 32px 16px">
+          <table
+            role="presentation"
+            width="100%"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="
+              max-width: 560px;
+              background-color: #ffffff;
+              border: 1px solid #dce2e8;
+              border-radius: 12px;
+            "
+          >
+            <tr>
+              <td
+                style="
+                  padding: 32px 24px;
+                  font-family:
+                    ui-sans-serif,
+                    system-ui,
+                    -apple-system,
+                    'Segoe UI',
+                    Roboto,
+                    'Helvetica Neue',
+                    Arial,
+                    sans-serif;
+                  color: #121922;
+                "
+              >
+                <p style="margin: 0 0 24px; font-size: 18px; font-weight: 700; color: #006390">
+                  TeamPanel
+                </p>
+                <h1 style="margin: 0 0 16px; font-size: 22px; line-height: 1.3; color: #121922">
+                  Dein Anmeldelink
+                </h1>
+                <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.5">
+                  Du hast einen Link angefordert, mit dem du dich ohne Passwort bei TeamPanel
+                  anmeldest.
+                </p>
+                <table
+                  role="presentation"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="margin: 0 0 24px"
+                >
+                  <tr>
+                    <td style="border-radius: 8px; background-color: #006390">
+                      <a
+                        href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email"
+                        style="
+                          display: inline-block;
+                          padding: 12px 24px;
+                          font-size: 16px;
+                          font-weight: 600;
+                          line-height: 20px;
+                          color: #f8fafc;
+                          text-decoration: none;
+                          border-radius: 8px;
+                        "
+                        >Bei TeamPanel anmelden</a
+                      >
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #58616f">
+                  Auf der Seite, die sich dann öffnet, bestätigst du noch einmal mit einem Klick.
+                  Der Link ist 1 Stunde gültig und funktioniert nur einmal.
+                </p>
+                <p style="margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: #58616f">
+                  Funktioniert der Button nicht? Kopiere diesen Link in die Adresszeile deines
+                  Browsers:
+                </p>
+                <p
+                  style="margin: 0 0 24px; font-size: 14px; line-height: 1.5; word-break: break-all"
+                >
+                  <a
+                    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email"
+                    style="color: #006390"
+                    >{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email</a
+                  >
+                </p>
+                <hr style="margin: 0 0 16px; border: 0; border-top: 1px solid #dce2e8" />
+                <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #58616f">
+                  Falls du das nicht warst, ignoriere diese E-Mail. Dein Konto bleibt unverändert.
+                </p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 16px 0 0; font-size: 12px; line-height: 1.5; color: #58616f">
+            Diese E-Mail wurde automatisch von TeamPanel verschickt.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

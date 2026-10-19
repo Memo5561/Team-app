@@ -9,7 +9,7 @@ interface CenteredMessageProps {
   children?: ReactNode;
 }
 
-/** Full-page message used by the home placeholder, 404 and error pages. */
+/** Full-page message used by the 404, error and configuration error pages. */
 export function CenteredMessage({ title, description, pageTitle, children }: CenteredMessageProps) {
   const { t } = useTranslation();
   return (

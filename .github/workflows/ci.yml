@@ -12,6 +12,22 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# bash -eo pipefail: a failing command inside a pipe fails the step.
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Local Supabase services the tests do not need (names as in `supabase start --help`, CLI 2.121).
+  # Database, Auth (gotrue), REST (postgrest), the gateway (kong) and Mailpit stay on: the
+  # integration and e2e tests sign users up, and GoTrue fails sign-ups if it cannot send the mail.
+  SUPABASE_EXCLUDE: realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+  # Masks keys and passwords when a `supabase start` log has to be shown after a failure.
+  MASK_SUPABASE_KEYS: >-
+    s/sb_secret_[A-Za-z0-9_-]+/sb_secret_***/g;
+    s/eyJ[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+/***JWT***/g;
+    s#(postgres(ql)?://[^:/@ ]+:)[^@ ]+@#\1***@#g
+
 jobs:
   quality:
     name: Format, lint, typecheck, unit tests
@@ -34,7 +50,7 @@ jobs:
   database:
     name: Database (migrations, pgTAP, generated types)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -44,8 +60,15 @@ jobs:
           check-latest: true
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The log (with the local default keys) is only shown, masked, if the start fails.
       - name: Start local Supabase (applies migrations and seed)
-        run: pnpm exec supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+        run: |
+          log="$RUNNER_TEMP/supabase-start.log"
+          if ! pnpm exec supabase start -x "$SUPABASE_EXCLUDE" > "$log" 2>&1 < /dev/null; then
+            sed -E "$MASK_SUPABASE_KEYS" "$log"
+            echo "::error::supabase start failed"
+            exit 1
+          fi
       - name: pgTAP tests
         run: pnpm exec supabase test db
       - name: Generated types are up to date
@@ -55,6 +78,10 @@ jobs:
             echo "::error::src/types/database.ts is stale. Run 'pnpm db:types' and commit the result."
             exit 1
           fi
+      - name: Local Supabase is ready for the integration tests
+        run: pnpm supabase:env
+      - name: Integration tests (Auth, PostgREST, RLS)
+        run: pnpm test:integration
       - name: Stop Supabase
         if: always()
         run: pnpm exec supabase stop --no-backup || true
@@ -62,7 +89,7 @@ jobs:
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -72,7 +99,28 @@ jobs:
           check-latest: true
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Pulls the images and starts the stack while the browser is installed. Output goes to a file
+      # (it contains the local default keys); the exit code is picked up by the wait step below. It is
+      # written to a temp file and renamed, so the wait step never reads a half-written file.
+      - name: Start local Supabase in the background
+        run: |
+          nohup bash -c 'pnpm exec supabase start -x "$SUPABASE_EXCLUDE" > "$RUNNER_TEMP/supabase-start.log" 2>&1 < /dev/null
+            echo "$?" > "$RUNNER_TEMP/supabase-start.exit.tmp"
+            mv "$RUNNER_TEMP/supabase-start.exit.tmp" "$RUNNER_TEMP/supabase-start.exit"' > /dev/null 2>&1 &
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Wait for local Supabase
+        timeout-minutes: 10
+        run: |
+          until [[ -f "$RUNNER_TEMP/supabase-start.exit" ]]; do sleep 2; done
+          if [[ "$(cat "$RUNNER_TEMP/supabase-start.exit")" != "0" ]]; then
+            sed -E "$MASK_SUPABASE_KEYS" "$RUNNER_TEMP/supabase-start.log"
+            echo "::error::supabase start failed"
+            exit 1
+          fi
+      # Writes .env.e2e.local (gitignored): the e2e build talks to the local stack with its
+      # publishable key. Without it the @supabase tests fail in CI (tests/e2e/global-setup.ts).
+      - name: Point the e2e build at local Supabase
+        run: pnpm supabase:env --write-e2e
       - run: pnpm e2e
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -80,6 +128,9 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+      - name: Stop Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup || true
 
   security:
     name: Secrets and dependencies

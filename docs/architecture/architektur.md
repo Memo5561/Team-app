@@ -297,9 +297,43 @@ jeden Importpfad inklusive `import()` und `import.meta.glob` auflöst):
 - **i18n** (§66): `i18next` + `react-i18next`, ESLint-Regel gegen hartkodierte JSX-Texte.
 - **Design Tokens** (§48): CSS-Variablen (shadcn-Konvention). Firmenfarbe (Branding-Entitlement) überschreibt nur
   `--brand`, nie Kontrastfarben (Accessibility).
-- **Routing:** `/login`, `/signup`, `/onboarding/*`, `/invite/:token`, `/o/:orgSlug/<modul>/...`. Guards prüfen
-  Session → Membership → Modul → Permission und dienen nur der UX.
-- **Formulare:** React Hook Form + Zod. Zod-Schemas spiegeln DB-Constraints, die DB bleibt maßgeblich.
+- **Routing** (React Router, Data Router): Guards sind Route-Middleware (`src/app/guards.ts`) und dienen nur der UX.
+  Stand Phase 1:
+
+  | Route | Guard | Umleitung |
+  |---|---|---|
+  | `/login`, `/signup` | `requireGuest` | mit Sitzung → `next` bzw. `/` |
+  | `/auth/confirm` | – (Ziel aller E-Mail-Links) | – |
+  | `/forgot-password` | – (auch angemeldet nutzbar, z. B. Hinweis „unsicheres Passwort“) | – |
+  | `/` | `requireSession` + `ProtectedLayout` | ohne Sitzung → `/login?next=<Pfad+Query>` |
+  | `/reset-password` | wie `/`, zusätzlich `requireEmailLinkSession` | Sitzung nicht aus einem E-Mail-Link → `/` |
+  | `*` | – | – (404-Seite) |
+
+  Die Root-Route zeigt einen Ladebildschirm (`HydrateFallback`), bis die Sitzung geprüft ist. `next` läuft nur über
+  `getSafeRedirect()` (`src/lib/safe-redirect.ts`). Später kommen `/onboarding/*`, `/invite/:token` und
+  `/o/:orgSlug/<modul>/...` dazu; die Guards prüfen dann Session → Membership → Modul → Permission.
+
+  `/reset-password` hat zwei Modi: „Neues Passwort festlegen“ nach einem Recovery-Link und, direkt nach der ersten
+  Bestätigung eines Kontos, den freiwilligen Schritt „Passwort festlegen“ mit „Überspringen“ (E-46). Den Modus setzt
+  `/auth/confirm` per Navigation-State, wenn die `/verify`-Antwort eine erste Bestätigung zeigt
+  (`src/platform/auth/first-confirmation.ts`, nur Zeitstempel des Servers). Er ändert nur Texte und den Ausweg, der
+  Guard bleibt derselbe.
+- **Auth-State** (`src/platform/auth`): Alle `supabase.auth`-Aufrufe und die Profil-Query liegen in `api.ts`.
+  `AuthProvider` abonniert `onAuthStateChange` genau einmal. Der Callback bleibt synchron: Er setzt nur React-State
+  und leert bei Abmeldung oder Nutzerwechsel den Query-Cache (`queryClient.clear()`); `await` auf Auth-Aufrufe darin
+  kann supabase-js blockieren. Zustände: `loading`, `signedIn` (Session, User), `signedOut` (optional mit Grund).
+  Eine selbst ausgelöste Abmeldung wird per Ref markiert. Jedes andere `SIGNED_OUT` gilt als „Sitzung beendet“, und
+  `ProtectedLayout` leitet zu `/login?reason=signedOut&next=…`. Token-Refresh und den Abgleich zwischen Tabs
+  (BroadcastChannel) übernimmt supabase-js.
+- **Formulare:** React Hook Form + Zod (`zodResolver`, typisiert als `useForm<z.input<S>, unknown, z.output<S>>`).
+  Zod-Schemas spiegeln DB- und Auth-Regeln (z. B. Passwort 10 Zeichen bis 72 Byte, Name wie `profiles`), ihre
+  Meldungen sind i18n-Keys. Die DB bleibt maßgeblich. Muster seit Phase 1:
+  - `noValidate`, Fokus auf das erste fehlerhafte Feld; Serverfehler in einer fokussierten Meldung (`role="alert"`)
+  - Absende-Button bleibt aktiv, zeigt beim Senden Spinner und `aria-busy`
+  - passende `autocomplete`-Werte; bei E-Mail `inputMode="email"`, `autoCapitalize="none"`, `spellCheck={false}`;
+    kein `autoFocus`
+  - Bausteine in `components/ui`: `Field` (Label, Beschreibung, Fehler mit `aria-invalid`/`aria-describedby`),
+    `Input` (44 px), `PasswordInput` (Anzeigen/Verbergen), `Alert`, `Card`, `Spinner`
 - **Auth-Token-Speicherung** (→ E-24): supabase-js speichert Tokens standardmäßig in `localStorage`. Das ist
   akzeptabel mit strikter CSP, kurzer JWT-Laufzeit und ohne `dangerouslySetInnerHTML`. Bearer-Tokens statt Cookies
   machen CSRF-Schutz für die API weitgehend überflüssig.
@@ -308,8 +342,8 @@ jeden Importpfad inklusive `import()` und `import.meta.glob` auflöst):
 
 | Umgebung | Datenbank | Frontend | Stripe | E-Mail |
 |---|---|---|---|---|
-| **local** | `supabase start` (Docker) | `vite dev` | Test-Keys + `stripe listen` | Inbucket/Mailpit (lokal) |
-| **staging** | eigenes Supabase-Projekt (EU) | Cloudflare Pages Preview/Branch | Test-Mode | Resend, Test-Domain |
+| **local** | `supabase start` (Docker) | `vite dev` | Test-Keys + `stripe listen` | Mailpit (lokal, `http://127.0.0.1:54324`) |
+| **staging** | eigenes Supabase-Projekt (EU) | Cloudflare Pages Preview/Branch | Test-Mode | bis Phase 4 Supabase-Standardversand (E-44), danach Resend mit Test-Domain |
 | **production** | eigenes Supabase-Projekt (EU, Pro-Plan) | Cloudflare Pages Production | Live-Mode | Resend, Prod-Domain |
 
 - **Migrationen** nur über `supabase/migrations/*.sql` (§76). Deployment auf staging/production ausschließlich über den
@@ -317,8 +351,15 @@ jeden Importpfad inklusive `import()` und `import.meta.glob` auflöst):
   Production mit Freigabe. Keine manuellen Änderungen in Produktion.
 - **CI (GitHub Actions)** bei jedem Push, vier parallele Jobs: `quality` (Format, Lint, Typecheck, Unit-Tests),
   `database` (`supabase start` → pgTAP → Typ-Drift-Check), `e2e` (Playwright Desktop + Mobile), `security` (gitleaks
-  über die gesamte Historie, `pnpm audit`, Bundle-Scan). Ab Phase 1 kommen Integrationstests dazu. Details:
-  [Roadmap 0.5](../roadmap.md#05-ci-und-automatisierung).
+  über die gesamte Historie, `pnpm audit`, Bundle-Scan). Details:
+  [Roadmap 0.5](../roadmap.md#05-ci-und-automatisierung). Seit Phase 1:
+  - `database` führt zusätzlich die Integrationstests (`tests/integration`, Vitest in Node) gegen das dort
+    gestartete Supabase aus.
+  - `e2e` startet ebenfalls ein lokales Supabase. Die Auth-Flows (Tag `@supabase`) holen ihre E-Mails aus Mailpit;
+    die Smoke-Tests laufen weiterhin ohne Supabase.
+- **Auth-E-Mails:** Vorlagen in `supabase/templates/`, lokal über `config.toml` verdrahtet. Staging und Production
+  lesen `config.toml` nicht; dort trägt der Product Owner Vorlagen und Auth-Einstellungen im Dashboard ein
+  ([Umgebungen §2.4](umgebungen.md#24-auth-einstellungen-stagingproduction)).
 - **Secrets** nur in GitHub Environments und Supabase-/Cloudflare-Konfiguration. `.env.example` ohne Werte. Das
   Frontend kennt nur `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` (öffentlich by design); das Env-Schema
   akzeptiert nur Publishable/anon-Keys (Allowlist).

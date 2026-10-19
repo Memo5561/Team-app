@@ -10,6 +10,7 @@
 | Mitarbeiter derselben Organisation | Fremde Arbeitszeiten, Urlaubsgründe, HR-Daten lesen; eigene Zeiten fälschen | Scope-Prüfung in RLS; append-only Events; Server-Zeit |
 | User mit `roles.manage` | Sich selbst Owner- oder Billing-Rechte geben | Eskalationsregeln in RPC und Trigger |
 | Anonymer Angreifer | API ohne Login nutzen, Einladungs-Tokens raten | `anon` ohne Tabellenrechte; Tokens mit 256 Bit, nur Hash gespeichert, Ablauf |
+| Anonymer Angreifer mit fremder E-Mail-Adresse | Konto vorab mit eigenem Passwort anlegen, das die echte Person später bestätigt | Registrierung nur per E-Mail-Link; Trigger löscht das Passwort bei der ersten Bestätigung (E-46) |
 | Fremder, der Webhooks fälscht | Pro-Tarif „kaufen“ | Stripe-Signaturprüfung; Status wird bei Stripe nachgeladen |
 | XSS über Benutzereingaben | Token-Diebstahl | React-Escaping, kein `dangerouslySetInnerHTML`, strikte CSP, keine SVG-Uploads |
 
@@ -208,19 +209,104 @@ gemappt (§61).
 
 ## 8. Auth und Sessions
 
-- Supabase Auth: E-Mail + Passwort **und** Magic Link (§9), E-Mail-Bestätigung Pflicht, Mindestlänge 10 Zeichen und
-  Leaked-Password-Check (Supabase-Option).
-- JWT-Laufzeit 15–60 min, Refresh-Token-Rotation an (Default).
-- Session Revocation (§53): „Überall abmelden“ = `signOut({ scope: 'global' })`. Eine archivierte Membership verliert
-  sofort den Zugriff, weil die Helper `status = 'active'` live prüfen.
-- Auth-Rate-Limits über Supabase konfigurieren (Sign-up, OTP, Passwort-Reset). Eigene Limits für RPCs mit Außenwirkung
-  (Einladungen: max. N pro Stunde und Organisation, gezählt in der Outbox).
+- Supabase Auth: E-Mail + Passwort **und** Magic Link (§9), E-Mail-Bestätigung Pflicht, Passwort mindestens
+  10 Zeichen und höchstens 72 Byte (bcrypt), Leaked-Password-Check (Supabase-Option, nur Production, E-40).
+- **Registrierung nur per E-Mail-Link** (E-43, E-46): `/signup` fragt Name und E-Mail, `signInWithOtp` mit
+  `shouldCreateUser: true` legt das Konto an, der Link in der Bestätigungs-E-Mail bestätigt und meldet an. Ein
+  Passwort gibt es erst danach: Nach der ersten Bestätigung bietet `/reset-password` den freiwilligen Schritt
+  „Passwort festlegen“ (mit „Überspringen“). Der Anmeldelink auf `/login` nutzt `shouldCreateUser: false`.
+- **Kein Passwort aus der Zeit vor der Bestätigung** (E-46, Pre-Account-Takeover): Trigger
+  `on_auth_user_first_confirmation` (`BEFORE UPDATE` auf `auth.users`, ohne Spaltenliste) →
+  `private.clear_password_before_first_confirmation()` (`SECURITY DEFINER`, `search_path = ''`). Wird ein Konto zum
+  ersten Mal bestätigt, nachdem eine Bestätigungs-E-Mail verschickt wurde (`confirmation_sent_at` gesetzt), und setzt
+  dieselbe Anweisung nicht selbst ein Passwort, wird `encrypted_password` zu `NULL`. Das gilt auch für direkte
+  Aufrufe von `/auth/v1/signup` mit Passwort. Konten aus `admin.createUser` mit `email_confirm: true` und
+  Passwörter, die nach der Bestätigung gesetzt werden, bleiben. Restrisiko: Ein bei der Registrierung fremd
+  gewählter Name bleibt im Profil, bis es eine Profilseite gibt (E-46).
+- **Neutrale Meldungen:** Registrierung, Anmeldelink, Passwort vergessen und „Bestätigungs-E-Mail erneut senden“
+  zeigen immer denselben Zustand („Prüfe dein Postfach“). `user_already_exists`, `email_exists`, `otp_disabled` und
+  `over_email_send_rate_limit` werden wie Erfolg behandelt, `identities.length` wird nie ausgewertet. Angezeigt
+  werden nur übersetzte Fehlercodes (`src/lib/errors.ts`), nie `error.message`. Restrisiko auf API-Ebene: E-45.
+- **E-Mail-Links mit `token_hash` und Bestätigungsklick:** Alle Vorlagen (`supabase/templates/`) verlinken auf
+  `{{ .SiteURL }}/auth/confirm?token_hash=…&type=…`. Die Seite nimmt den Token sofort aus Adresszeile und Verlauf
+  und löst ihn erst nach Klick auf „Weiter“ ein (`verifyOtp`). Link-Scanner in Postfächern, die Links vorab öffnen,
+  verbrauchen den Einmal-Token so nicht. Akzeptiert werden nur die Typen `email` und `recovery`. Ist schon jemand
+  angemeldet, wird diese Sitzung vorher lokal beendet (keine vermischten Konten).
+- **`detectSessionInUrl: false`:** supabase-js liest keine Tokens oder Codes aus der URL; eine Sitzung entsteht nur
+  über den Klick auf `/auth/confirm` oder den Login. `flowType` bleibt `pkce`.
+- **Weiterleitungen:** Die App übergibt nie `redirectTo`/`emailRedirectTo`; E-Mail-Links nutzen nur die Site-URL.
+  Der Parameter `next` läuft ausschließlich über `getSafeRedirect()` (`src/lib/safe-redirect.ts`): nur relative
+  Pfade derselben Origin, keine Auth-Seiten. Regel für die Redirect-Allowlist der gehosteten Projekte: nur exakte
+  Origins der eigenen Domains, keine Wildcards; Production wird so angelegt. Ausnahme: Staging hat aus Phase 0 noch
+  die Preview-Wildcard (`https://*.teampanel-8i0.pages.dev/**`). Sie bleibt wirkungslos, solange die App keine
+  Redirect-URL übergibt, und wird in Phase 15 (Auth-Härtung) überprüft.
+- **Passwort setzen oder ändern** nur auf `/reset-password` mit einer Sitzung aus einem E-Mail-Link (Methoden `otp`,
+  `magiclink`, `recovery`): nach einem Recovery-Link oder im Schritt „Passwort festlegen“ nach der ersten
+  Bestätigung. Den Einrichtungsmodus wählt `/auth/confirm` nur anhand von Server-Zeitstempeln der `/verify`-Antwort;
+  er ändert Texte, nicht den Guard. Gehostet ist zusätzlich „Require current password when updating“ an: Andere
+  Sitzungen brauchen das aktuelle Passwort (E-45). Danach `signOut({ scope: 'others' })`.
+- JWT-Laufzeit 1 h (`jwt_expiry = 3600`, Supabase-Default), Refresh-Token-Rotation an (Default).
+- **Abmelden und Session Revocation** (§53):
+
+  | Aktion | Aufruf | Wirkung |
+  |---|---|---|
+  | „Abmelden“ | `signOut({ scope: 'local' })` | nur dieser Browser |
+  | „Überall abmelden“ | `signOut({ scope: 'global' })` | alle Refresh-Tokens widerrufen; Access-Tokens bis zu 1 h gültig (E-45) |
+  | nach Passwortänderung | `signOut({ scope: 'others' })` | alle anderen Sitzungen |
+
+  Endet die Sitzung von außen (anderer Tab, anderes Gerät, abgelaufen), führt die App zu
+  `/login?reason=signedOut&next=…`. Bei Abmeldung oder Nutzerwechsel wird der Query-Cache geleert. Eine archivierte
+  Membership verliert sofort den Zugriff, weil die Helper `status = 'active'` live prüfen.
+- Auth-Rate-Limits: Supabase-Defaults (pro IP), gehostet mindestens 60 s zwischen zwei Mails an dieselbe Adresse.
+  Kein CAPTCHA, keine Kontosperre (E-45). Eigene Limits für RPCs mit Außenwirkung (Einladungen: max. N pro Stunde und
+  Organisation, gezählt in der Outbox).
 - CSP über Cloudflare Pages `_headers`: `default-src 'self'; connect-src 'self' https://<projekt>.supabase.co wss://…; img-src 'self' blob: data: https://<projekt>.supabase.co; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`. Dazu `X-Content-Type-Options`, `Referrer-Policy` und `Permissions-Policy` (Geolocation, Kamera und Mikrofon aus).
 
 ## 9. Teststrategie Sicherheit
 
-**Werkzeug:** pgTAP via `supabase test db` (läuft in CI gegen eine frische lokale DB). Helper
-`tests.as_user(email)` setzt `role authenticated` und `request.jwt.claims`.
+**Werkzeug:** pgTAP via `supabase test db` (läuft in CI gegen eine frische lokale DB; ohne Docker
+`pnpm db:test:local`). Jede Testdatei läuft in einer Transaktion mit `rollback`.
+
+**Test-Helfer** (`supabase/tests/helpers/auth.psql`, eingebunden per `\ir ../helpers/auth.psql` direkt nach `begin;`):
+
+| Helfer | Zweck |
+|---|---|
+| `tests.create_user(email, meta, password_hash, confirmed)` | legt einen Nutzer in `auth.users` an wie GoTrue (E-Mail normalisiert, `meta` als `raw_user_meta_data`) und löst damit den Sign-up-Trigger aus; gibt die ID zurück. Optional: Passwort-Hash (Standard `''` = keins) und `confirmed` (Standard `true`); unbestätigt ohne verschickte Mail wie `admin.createUser` vor der Bestätigung |
+| `tests.create_user_as(rolle, email, meta)` | dasselbe als andere Rolle, z. B. `supabase_auth_admin` (so schreibt GoTrue); `null`, wenn die DB den Rollenwechsel nicht erlaubt (Test wird dann übersprungen) |
+| `tests.sign_up(email, hash, meta)` | Selbstregistrierung wie GoTrue: unbestätigter Nutzer mit diesem Passwort-Hash, danach „verschickte“ Bestätigungs-E-Mail (`confirmation_token`, `confirmation_sent_at`) |
+| `tests.confirm_email(email)` | bestätigt die Adresse wie GoTrues `User.Confirm`: ein `UPDATE` von `confirmation_token` und `email_confirmed_at` |
+| `tests.run_as(rolle, anweisung)` | führt eine SQL-Anweisung als andere Rolle aus; `null`, wenn die DB den Rollenwechsel nicht erlaubt |
+| `tests.user_id(email)` | ID eines Nutzers, aus jeder Rolle aufrufbar |
+| `tests.as_user(email)` | handelt als dieser Nutzer: Rolle `authenticated` plus JWT-Claims (`sub`, `role`, `aud`, `email`) |
+| `tests.as_anon()` | handelt als nicht angemeldeter Client (Rolle `anon`) |
+| `tests.reset_auth()` | zurück zu `postgres`, ohne Claims |
+
+Testnutzer verwenden reservierte Domains (z. B. `@profiles.test`), damit sie nicht mit Seed-Daten kollidieren.
+Details: `supabase/README.md`.
+
+**Phase 1** (`010_profiles.test.sql`): `profiles` liefert nur die eigene Zeile, `anon` und Nutzer ohne Claims sehen
+nichts, `authenticated` hat kein `INSERT`/`UPDATE`/`DELETE`. Der Sign-up-Trigger übersteht beliebige Metadaten
+(fehlend, kein Objekt, zu lang, Steuerzeichen, unbekannte Sprache), und das Löschen des Nutzers entfernt das Profil.
+
+**Phase 1, E-46** (`020_auth_users_password_guard.test.sql`): Trigger und Funktion sind wie vorgeschrieben
+angelegt und für `anon`/`authenticated` nicht ausführbar. Die erste Bestätigung aus einer Bestätigungs-E-Mail
+löscht das vorher gesetzte Passwort (Registrierung mit Passwort, per Link, Bestätigung über einen Recovery-Link).
+Es bleibt bei `admin.createUser`, Einladungen, schon bestätigten Konten, Updates ohne Bestätigung und Passwörtern,
+die nach der Bestätigung gesetzt werden; zusätzlich als `supabase_auth_admin`, wo die DB den Rollenwechsel erlaubt.
+Die Tests spielen GoTrues Anweisungen nach; ob GoTrue wirklich so schreibt, prüfen die Integrationstests.
+
+**Integrationstests** (`tests/integration`, Vitest in Node): laufen in CI im Job `database` gegen das dort
+gestartete lokale Supabase, also über die echte Auth-API und PostgREST statt direkt in SQL. Phase 1: Sign-up →
+Profil existiert; ein Nutzer kann das Profil eines anderen nicht lesen; ein vor der Bestätigung gesetztes Passwort
+gilt danach nicht, eines aus `admin.createUser` oder nach der Bestätigung schon (E-46,
+`password-guard.test.ts`). Geprüft werden die Wege der App, auf denen ein E-Mail-Link ein noch unbestätigtes Konto
+bestätigt: die Bestätigungs-E-Mail des Angreifers, eine spätere Registrierung per Link, der Anmeldelink von
+`/login` und „Passwort vergessen“. Sie ergänzen pgTAP dort, wo GoTrue selbst beteiligt ist, und schlagen fehl, wenn
+eine neue Version von Supabase Auth auf diesen Wegen anders in `auth.users` schreibt als angenommen. Das gilt nur für
+die Version, die die gepinnte Supabase CLI startet. Gehostete Projekte (Staging, Production) aktualisiert Supabase
+unabhängig davon; dort prüft nur der Nachweis E-46 aus
+[umgebungen.md §2.4](../architecture/umgebungen.md#24-auth-einstellungen-stagingproduction) (Test nach dem
+Deployment, Schritt 4), der nach Updates von Supabase Auth zu wiederholen ist.
 
 **Guardrails** (`supabase/tests/database/000_guardrails.test.sql`, fangen Fehler bei *künftigen* Objekten ab):
 - Jede Tabelle in `public` hat RLS aktiviert.
