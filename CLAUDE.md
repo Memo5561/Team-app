@@ -9,8 +9,15 @@ Modulares Team-Management-SaaS für KMU (AT/EU). Responsive Web-App/PWA. **Keine
 4. `docs/architecture/architektur.md`, `docs/architecture/datenmodell.md`, `docs/security/rls-und-berechtigungen.md`
 
 ## Aktueller Stand
-- Architektur und Plan liegen als Entwurf vor. **Phase 0 ist noch nicht begonnen.**
-- Befehle (`pnpm check`, `pnpm db:test` …) werden in Phase 0 eingerichtet und hier ergänzt.
+- Alle Empfehlungen in `entscheidungen-und-risiken.md` sind vom Product Owner freigegeben (2026-10-19).
+- **Phase 0 (Repository-Fundament) ist umgesetzt.** Nächste Phase: 1 (Auth). Details und Abnahme: `docs/roadmap.md`.
+
+## Befehle
+- `pnpm check`: Format, Lint, Typecheck, Unit-Tests. **Vor jedem Commit.**
+- `pnpm e2e`: Playwright (Desktop + Mobile). In Cloud-Sessions mit `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium`.
+- `pnpm db:test`: pgTAP gegen lokales Supabase (Docker). Ohne Docker-Registry (Cloud-Sessions): `pnpm db:test:local`; braucht lokales PostgreSQL + pgTAP (`apt-get install postgresql-16-pgtap`). CI bleibt maßgeblich.
+- `pnpm exec supabase migration new <name>`: neue Migration. `pnpm db:types`: DB-Typen neu generieren (braucht `pnpm db:start`).
+- Setup der Umgebungen: `docs/architecture/umgebungen.md`.
 
 ## Nicht verhandelbar
 - Sicherheit liegt in der Datenbank: RLS auf jeder `public`-Tabelle, zusammengesetzte FKs `(organization_id, x_id)`, Statusübergänge/Genehmigungen nur über `SECURITY DEFINER`-RPCs mit `set search_path = ''`. Frontend-Checks sind nur UX.
@@ -18,11 +25,12 @@ Modulares Team-Management-SaaS für KMU (AT/EU). Responsive Web-App/PWA. **Keine
 - Code fragt Entitlements ab (`entitlement('max_members')`), nie Tarifnamen.
 - `clock_events` ist append-only, Zeitstempel kommen vom Server, `time_entries` ist abgeleitet.
 - Zeitpunkte als `timestamptz` (UTC), Darstellung in Standort-/Organisationszeitzone; Schichten als `starts_at`/`ends_at`.
-- Keine hartkodierten UI-Texte (i18n-Keys), keine hartkodierten Farben (Design Tokens).
+- Keine hartkodierten UI-Texte (i18n-Keys in `src/i18n/de.json`), keine hartkodierten Farben (Design Tokens in `src/styles/tokens.css`).
 - Keine Rohfehler an Nutzer; Fehlercodes über `src/lib/errors.ts` mappen.
 - Keine Secrets im Repo; Service-Role-Key nie im Frontend.
 - DB-Änderungen nur per Migration in `supabase/migrations/`; jede neue Mandantentabelle bekommt pgTAP-Isolationstests.
-- Feature-Module (`src/modules/*`) importieren nur aus `src/platform`, `src/components`, `src/lib` – nie aus anderen Modulen.
+- Feature-Module (`src/modules/*`) importieren nur aus `src/platform`, `src/components`, `src/lib` – nie aus anderen Modulen. Imports außerhalb des eigenen Ordners immer über `@/` (ESLint erzwingt beides).
+- Neue Tabellen müssen die Guardrails in `supabase/tests/database/000_guardrails.test.sql` bestehen (RLS, explizite Grants an `authenticated`, keine `FOR ALL`-Policies, `unique (organization_id, id)`).
 
 ## Arbeitsweise pro Phase (§90)
 Analyse → kurzer Plan → Datenmodell & Permissions → Tests definieren → implementieren → Tests/Lint/Typecheck → Security prüfen → UI/UX prüfen → Doku aktualisieren → Checkpoint-Bericht (§91). Nur eine Phase gleichzeitig. Keine eigenmächtigen großen Features. Offene 🟥-Entscheidungen der Phase vorher beim Product Owner klären.

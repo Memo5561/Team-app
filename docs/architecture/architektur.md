@@ -1,6 +1,6 @@
 # TeamPanel – Technische Architektur (V1)
 
-> Status: **Entwurf zur Freigabe** · Grundlage: [`docs/product/spezifikation.md`](../product/spezifikation.md)
+> Status: **Freigegeben am 2026-10-19** · Grundlage: [`docs/product/spezifikation.md`](../product/spezifikation.md)
 > Verwandte Dokumente:
 > [Datenmodell](datenmodell.md) ·
 > [RLS & Berechtigungen](../security/rls-und-berechtigungen.md) ·
@@ -31,8 +31,8 @@ ist das mit einem Verweis `→ E-xx` auf [Entscheidungen & Risiken](entscheidung
 │  React + Vite (SPA)          │  HTTPS │                                              │
 │  Cloudflare Pages (statisch) │───────▶│  Auth (GoTrue)     ── JWT (sub = user_id)     │
 │                              │        │  PostgREST         ── Tabellen-CRUD unter RLS │
-│  supabase-js (anon key +     │        │  RPC (SQL-Funktionen) ── Mehrschritt-Logik    │
-│  User-JWT, nie Service-Key)  │        │  Storage (private Buckets, signierte URLs)    │
+│  supabase-js (publishable    │        │  RPC (SQL-Funktionen) ── Mehrschritt-Logik    │
+│  key + User-JWT, nie Secret) │        │  Storage (private Buckets, signierte URLs)    │
 └──────────────────────────────┘        │  Edge Functions (Deno) ── Stripe, E-Mail,     │
                                         │                            Einladungen        │
                                         │  pg_cron ── Jobs (Recurrence, Grace, Outbox)  │
@@ -317,7 +317,8 @@ Regeln (per ESLint `import/no-restricted-paths` erzwungen):
   pgTAP-Tests (RLS) → Integrationstests → Build → Playwright (Smoke) → Typ-Drift-Check (generierte Typen müssen
   aktuell sein).
 - **Secrets** nur in GitHub Environments und Supabase-/Cloudflare-Konfiguration. `.env.example` ohne Werte. Das
-  Frontend kennt nur `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY` (öffentlich by design).
+  Frontend kennt nur `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` (öffentlich by design); das Env-Schema
+  lehnt Secret- und service_role-Keys ab.
   `gitleaks` läuft in CI.
 
 ## 16. Observability (§62)

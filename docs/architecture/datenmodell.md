@@ -1,6 +1,6 @@
 # TeamPanel – Datenmodell V1
 
-> Status: **Entwurf zur Freigabe** · Ergänzt §49/§50 der [Spezifikation](../product/spezifikation.md).
+> Status: **Freigegeben am 2026-10-19** · Ergänzt §49/§50 der [Spezifikation](../product/spezifikation.md).
 > Das Dokument beschreibt das Zielmodell. Jede Tabelle entsteht erst in der Phase, die sie braucht
 > (siehe [Implementierungsplan](../roadmap.md)), immer per versionierter Migration.
 

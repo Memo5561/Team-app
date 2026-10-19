@@ -1,0 +1,34 @@
+{
+  "app": {
+    "name": "TeamPanel"
+  },
+  "home": {
+    "title": "TeamPanel",
+    "subtitle": "Dein Team-System entsteht gerade.",
+    "status": "Das technische Fundament steht. Die ersten Funktionen folgen in den nächsten Phasen."
+  },
+  "notFound": {
+    "title": "Seite nicht gefunden",
+    "description": "Diese Seite gibt es nicht oder sie wurde verschoben.",
+    "backHome": "Zur Startseite"
+  },
+  "errorBoundary": {
+    "title": "Etwas ist schiefgelaufen",
+    "description": "Bitte lade die Seite neu. Wenn der Fehler bleibt, melde dich beim Support.",
+    "reload": "Seite neu laden"
+  },
+  "config": {
+    "title": "Konfigurationsfehler",
+    "description": "TeamPanel ist nicht korrekt konfiguriert und kann nicht starten.",
+    "detailsLabel": "Details für Administratoren"
+  },
+  "errors": {
+    "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    "network": "Keine Verbindung. Bitte prüfe deine Internetverbindung.",
+    "forbidden": "Dafür fehlt dir die Berechtigung.",
+    "notFound": "Der Eintrag wurde nicht gefunden.",
+    "conflict": "Das steht im Konflikt mit bestehenden Daten.",
+    "invalidInput": "Bitte überprüfe deine Eingaben.",
+    "limitReached": "Das Limit deines Tarifs ist erreicht."
+  }
+}

@@ -1,0 +1,3 @@
+-- Local and staging seed data. NEVER applied to production.
+-- The "Demo GmbH" and "Fremd AG" demo organizations are added in Phase 2
+-- (docs/architecture/datenmodell.md §10). Phase 0 has no business tables.

@@ -1,6 +1,6 @@
 # TeamPanel – Sicherheitsmodell: Mandantentrennung, RLS und Berechtigungen
 
-> Status: **Entwurf zur Freigabe** · Konkretisiert §4, §8, §50–§53, §73 und §92 der [Spezifikation](../product/spezifikation.md).
+> Status: **Freigegeben am 2026-10-19** · Konkretisiert §4, §8, §50–§53, §73 und §92 der [Spezifikation](../product/spezifikation.md).
 
 ## 1. Bedrohungsmodell (kurz)
 

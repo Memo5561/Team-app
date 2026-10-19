@@ -1,15 +1,15 @@
 # TeamPanel – Widersprüche, Lücken, Risiken und Architekturentscheidungen
 
-> Status: **Entwurf zur Freigabe**. Nichts hier ändert die [Spezifikation](../product/spezifikation.md) still.
-> Jeder Punkt nennt den Befund, das Risiko und eine **Empfehlung**, die als Default gilt, bis der Product Owner anders
-> entscheidet.
+> Status: **Freigegeben am 2026-10-19.** Der Product Owner hat alle Empfehlungen dieses Dokuments übernommen. Jede
+> **Empfehlung** gilt damit als verbindliche Entscheidung, bis sie ausdrücklich geändert wird. Nichts hier ändert die
+> [Spezifikation](../product/spezifikation.md) still.
 >
 > **Legende:** 🟥 Entscheidung des Product Owners nötig, bevor die betroffene Phase startet ·
 > 🟨 Empfehlung wird umgesetzt, solange niemand widerspricht · 🟩 rein technische Präzisierung
 
-## Übersicht: Entscheidungen, die vor ihrer Phase geklärt sein müssen
+## Übersicht: Product-Owner-Entscheidungen (alle am 2026-10-19 wie empfohlen getroffen)
 
-| Nr. | Thema | Betrifft Phase | Empfehlung (Kurzform) |
+| Nr. | Thema | Betrifft Phase | Entscheidung (Kurzform) |
 |---|---|---|---|
 | E-02 | Rollenrechte im Free-Tarif fest oder konfigurierbar? | 3 | Fest; Konfiguration ab Pro |
 | E-04 | Mitarbeiter ohne E-Mail/Account erlaubt? | 4 | Ja |

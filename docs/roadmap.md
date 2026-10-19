@@ -1,6 +1,6 @@
 # TeamPanel – Implementierungsplan V1
 
-> Status: **Entwurf zur Freigabe** · Basis: §70/§71 der [Spezifikation](product/spezifikation.md), angepasst gemäß
+> Status: **Freigegeben am 2026-10-19**, Phase 0 umgesetzt · Basis: §70/§71 der [Spezifikation](product/spezifikation.md), angepasst gemäß
 > [E-26](architecture/entscheidungen-und-risiken.md#e-26--phasenreihenfolge-der-spec-hat-lücken).
 >
 > Jede Phase folgt dem Ablauf aus §90 (Analyse → Plan → Datenmodell/Permissions → Tests definieren → Implementieren →
@@ -31,92 +31,93 @@
 
 ---
 
-## Phase 0 – Repository-Fundament (detailliert)
+## Phase 0 – Repository-Fundament
 
-**Ziel:** Ein leeres, aber produktionsreifes Gerüst. Jede spätere Phase kann sofort Migrationen, Tests und UI
-hinzufügen, ohne Infrastruktur nachzuziehen. **Keine Businesslogik.**
+**Status: umgesetzt, Abnahme ausstehend (CI-Lauf auf GitHub).** Ziel: ein leeres, aber produktionsreifes Gerüst,
+damit jede spätere Phase sofort Migrationen, Tests und UI hinzufügen kann. **Keine Businesslogik.**
 
 ### 0.1 Toolchain
-- Node 22 LTS (`.nvmrc`), **pnpm** (`packageManager`-Feld), Vite + React + TypeScript.
-- `tsconfig`: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, Pfad-Alias `@/`.
-- ESLint (Flat Config): `typescript-eslint` (strict-type-checked), `react-hooks`, `jsx-a11y`, `import`
-  (Grenzen: `modules/*` ↛ `modules/*`, `components/ui` ↛ Domäne), `i18next/no-literal-string` für JSX, Verbot von
-  `dangerouslySetInnerHTML`.
-- Prettier inkl. `prettier-plugin-tailwindcss`. `.editorconfig`.
-- Scripts: `dev`, `build`, `preview`, `lint`, `format`, `format:check`, `typecheck`, `test`, `test:watch`, `e2e`,
-  `db:start`, `db:reset`, `db:test`, `db:types`, `check` (alles außer E2E).
+- Node ≥ 22.22 (`.nvmrc`), pnpm 10 (`packageManager`), Vite 8, React 19, TypeScript 6.0, alle Versionen exakt gepinnt.
+  TypeScript 7 und ESLint 10 sind bewusst noch nicht im Einsatz: `typescript-eslint` unterstützt TypeScript nur bis
+  6.0, `eslint-plugin-jsx-a11y` ESLint nur bis 9. Dependabot meldet, sobald das Upgrade möglich ist.
+- `tsconfig.app.json` (Browser) / `tsconfig.node.json` (Configs, Skripte, Tests): `strict`, `noUncheckedIndexedAccess`,
+  `noUnusedLocals/Parameters`, `verbatimModuleSyntax`, `erasableSyntaxOnly`, Alias `@/`.
+- ESLint 9 (Flat Config): `typescript-eslint` strict- + stylistic-type-checked, `react-hooks`, `react-refresh`,
+  `jsx-a11y` (strict), `i18next/no-literal-string` (JSX-Text und sichtbare Attribute), Verbot von
+  `dangerouslySetInnerHTML`/`innerHTML`/`eval`. Architekturgrenzen in `config/eslint-rules.js`:
+  `modules/x` ↛ `modules/y`, `platform` ↛ `modules`/`app`, `components`/`lib` ↛ Domäne, keine `../`-Importe
+  (immer `@/`). Die Regeln sind selbst getestet (`tests/lint/`).
+- Prettier (+ Tailwind-Klassensortierung). Markdown ist ausgenommen, die Doku ist von Hand formatiert.
 
 ### 0.2 Frontend-Gerüst
-- Tailwind CSS + shadcn/ui (initialisiert, noch keine Komponenten außer `Button` als Referenz).
-- `src/styles/tokens.css`: Design Tokens als CSS-Variablen (Farben, Radius, Abstände, Typografie), Light Theme;
-  Dark-Mode-Variablen vorbereitet, nicht aktiv (§48).
-- React Router mit Layout-Skelett (`/` → Platzhalterseite, `*` → 404). TanStack-Query-Provider. Error Boundary.
-- i18next mit `src/i18n/de.json` und typisierten Keys (§66).
-- `src/lib/env.ts`: Zod-Schema für `import.meta.env`, schlägt beim Start mit klarer Meldung fehl (§71
-  „environment schema“).
-- `src/lib/supabase.ts`: Client-Factory (nur Anon-Key).
-- `src/lib/errors.ts`: Gerüst des Fehler-Mappings (Code → i18n-Key, Fallback „Etwas ist schiefgelaufen“).
-- Ordnerstruktur gemäß [Architektur §14](architecture/architektur.md#14-frontend-architektur) mit `README.md` je
-  Hauptordner (eine Zeile Zweck).
+- Tailwind CSS 4 + shadcn/ui (`components.json`, `Button` als Referenz; Standardhöhe 44 px für Touch, §45).
+- Design Tokens in `src/styles/tokens.css` (semantische Farben, Radius, Systemschrift ohne externes Font-CDN).
+  Dark-Mode-Werte vorbereitet, aber nicht aktiv.
+- React Router 8 (`/` Platzhalter, `*` 404, Error-Element), TanStack Query (Polling-Defaults gemäß E-35), i18next mit
+  typisierten Keys (`de.json`).
+- **Env-Schema** (`src/lib/env-schema.ts`, Zod): `VITE_APP_ENV`, `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_PUBLISHABLE_KEY`. Supabase hat die „anon keys“ durch „publishable keys“ ersetzt, alte anon-JWTs
+  werden weiter akzeptiert. Das Schema **lehnt Secret- und service_role-Keys ab** und verlangt `https` in Staging und
+  Production. Es läuft beim Build (der Build schlägt fehl) und beim App-Start (Konfigurationsfehlerseite).
+- `src/lib/supabase.ts` (nur Publishable Key, PKCE) und `src/lib/errors.ts` (SQLSTATE-/PostgREST-/`TP…`-Codes →
+  i18n-Keys).
+- Code-Splitting: `vendor-react` und `vendor` als langlebige Chunks.
+- Sentry ist auf „vor Pilot“ verschoben, um in Phase 0 keine ungenutzte Abhängigkeit einzubauen.
 
-### 0.3 Supabase lokal
-- `supabase init` → `supabase/config.toml` (Auth: E-Mail-Bestätigung an, Mindestpasswortlänge; Site-URL lokal).
-- Migration `…_baseline.sql`:
-  - Extensions `citext`, `btree_gist` (pgTAP nur in Tests).
-  - Schema `private` (nicht exponiert), Funktion `private.set_updated_at()`.
-  - Rechte-Härtung: Default Privileges so, dass `anon` auf künftige Tabellen und Funktionen in `public` nichts erhält.
-    Funktionen standardmäßig nicht für `public` ausführbar.
-- `supabase/tests/000_meta.test.sql` (pgTAP): RLS auf allen `public`-Tabellen; keine Policies für `anon`/`public`;
-  `search_path` bei allen `SECURITY DEFINER`-Funktionen; `anon` ohne Tabellenrechte. Die Tests laufen schon jetzt
-  (leer = grün) und schützen alle künftigen Migrationen.
-- `supabase/seed.sql`: leer mit Kommentar (Demo GmbH ab Phase 2).
-- Generierte Typen nach `src/types/database.ts`; CI prüft, dass sie aktuell sind.
+### 0.3 Supabase
+- `supabase/config.toml`: E-Mail-Bestätigung an, Mindestpasswortlänge 10, `secure_password_change`, lokale
+  Redirect-URLs.
+- Migration `20261019150258_baseline.sql`: `citext` und `btree_gist` im Schema `extensions`; Schema `private`
+  (nicht exponiert); **Default Privileges**: neue Tabellen, Sequenzen und Funktionen in `public` gewähren
+  `anon`/`authenticated` nichts, Funktionen sind für `PUBLIC` nicht ausführbar; `private.set_updated_at()`.
+- `supabase/tests/database/000_guardrails.test.sql` (17 pgTAP-Assertions), die automatisch für **jede künftige**
+  Migration gelten: RLS auf allen Tabellen, keine Policies für `anon`/`public`, keine `FOR ALL`-Policies, Views nur
+  mit `security_invoker`, `anon` ohne Tabellen- und Funktionsrechte, `SECURITY DEFINER` nur mit `search_path`,
+  Mandantentabellen mit `unique (organization_id, id)` und Select-Policy, Probe-Objekte prüfen die Default Privileges.
+- `src/types/database.ts` mit postgres-meta v0.100.0 erzeugt (derselbe Generator, den die CLI 2.121 verwendet).
+  CI prüft die Aktualität.
+- `pnpm db:test:local`: Ersatz-Testlauf ohne Docker (Wegwerf-PostgreSQL + Supabase-Shim) für Umgebungen, in denen
+  die Supabase-Images nicht geladen werden können. Maßgeblich bleibt CI.
 
 ### 0.4 Tests
-- Vitest + React Testing Library + jsdom; ein Smoke-Test (App rendert, i18n-Text sichtbar).
-- Playwright (Chromium) mit einem Smoke-Test gegen `vite preview`.
-- Struktur: `src/**/*.test.ts(x)` (Unit), `tests/integration/` (gegen lokales Supabase, ab Phase 1), `tests/e2e/`,
-  `supabase/tests/` (pgTAP).
+- Vitest + React Testing Library: Routing (Home, 404, Navigation), Konfigurationsfehlerseite, Env-Schema
+  (u. a. Ablehnung von Secret-Keys), Fehler-Mapping, Security-Header, ESLint-Architekturregeln: 36 Tests.
+- Playwright: Smoke-Tests auf **Desktop und Mobile** (Pixel 7), inkl. Prüfung der Touch-Zielgröße ≥ 44 px.
+- pgTAP: Guardrails (siehe 0.3).
 
-### 0.5 CI (GitHub Actions)
-`.github/workflows/ci.yml`, auf `pull_request` und Push nach `main`:
+### 0.5 CI und Automatisierung
+`.github/workflows/ci.yml` läuft bei jedem Push:
 
 | Job | Schritte |
 |---|---|
-| `quality` | pnpm install (Cache) → `format:check` → `lint` → `typecheck` → `test` |
-| `database` | Supabase CLI → `supabase start` (nur DB-Dienste) → `db reset` → `db test` → Typ-Drift-Check |
-| `e2e` | `build` → Playwright Smoke |
-| `security` | `gitleaks`, `pnpm audit --prod` (Warnung), Bundle-Scan auf `service_role`/`sk_` |
+| `quality` | `format:check` → `lint` → `typecheck` → `test` |
+| `database` | `supabase start` (ohne nicht benötigte Dienste) → `supabase test db` → Typ-Drift-Check |
+| `e2e` | Playwright (Desktop + Mobile), Report als Artefakt bei Fehlern |
+| `security` | gitleaks (gesamte Git-Historie), `pnpm audit --prod --audit-level high` (**blockierend**), Bundle-Scan auf Secret-/service_role-Keys |
 
-Dazu `dependabot.yml` (npm + GitHub Actions, wöchentlich) und eine PR-Vorlage mit der Definition-of-Done-Checkliste
-(§75).
+`deploy-database.yml` läuft nur manuell: DB-Tests erneut ausführen → `db push --dry-run` → `db push`, Production nur
+mit Freigabe. Dazu kommen `dependabot.yml` (npm gruppiert, GitHub Actions) und eine PR-Vorlage mit
+Definition-of-Done-Checkliste (§75).
 
-### 0.6 Hosting- und Umgebungsvorbereitung
-- `public/_headers` (CSP und Security-Header, siehe [Sicherheitsmodell §8](security/rls-und-berechtigungen.md#8-auth-und-sessions)), `public/_redirects` (SPA-Fallback).
-- `.env.example` (nur `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV`, `VITE_SENTRY_DSN` optional).
-- `docs/architecture/umgebungen.md`: Anleitung für die **manuellen Schritte des Product Owners** (die Claude nicht
-  ausführen kann/soll):
-  1. Zwei Supabase-Projekte in der EU-Region anlegen (staging, production).
-  2. Cloudflare-Pages-Projekt mit GitHub verbinden (Production = `main`, Preview = PRs).
-  3. GitHub Environments `staging` und `production` mit Secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
-     `SUPABASE_PROJECT_REF`).
-  4. Deploy-Workflow für Migrationen (`supabase db push`) erst nach Freigabe aktivieren; production nur mit
-     manueller Bestätigung (Environment Protection).
-- Erweiterung des vorhandenen SessionStart-Hooks: `pnpm install`, damit Cloud-Sessions Lint und Tests ausführen
-  können.
-
-### 0.7 Projektregeln
-- `CLAUDE.md` mit Befehlen, Arbeitsregeln (§89–§92) und Verweisen auf die Doku.
-- `README.md` mit Setup in 5 Schritten.
+### 0.6 Hosting
+- Security-Header werden beim Build als `dist/_headers` erzeugt (`config/security-headers.ts`), mit der CSP-Quelle der
+  jeweiligen Supabase-URL. Eine `_redirects`-Datei ist nicht nötig (Cloudflare Pages SPA-Modus).
+- Schritt-für-Schritt-Anleitung für die manuellen Schritte: [Umgebungen](architecture/umgebungen.md).
+- **Offen:** Die Erweiterung des SessionStart-Hooks (`.claude/hooks/session-start.sh`) um `pnpm install` und die
+  pgTAP-Installation wurde aus Sicherheitsgründen nicht automatisch vorgenommen. Der Product Owner übernimmt sie
+  selbst (Vorschlag im Phase-0-Bericht).
 
 ### Abnahmekriterien Phase 0
-- [ ] `pnpm check` lokal grün; `pnpm e2e` grün; `pnpm db:test` grün.
-- [ ] CI auf GitHub grün (alle 4 Jobs).
-- [ ] Ein absichtlich hartkodierter JSX-Text und ein Import `modules/a → modules/b` lassen den Lint fehlschlagen
-      (geprüft und wieder entfernt).
-- [ ] Eine Test-Migration mit einer Tabelle ohne RLS lässt `db:test` fehlschlagen (geprüft und wieder entfernt).
-- [ ] Ein fehlendes `VITE_SUPABASE_URL` erzeugt eine verständliche Startfehlermeldung.
-- [ ] Keine Secrets im Repo (`gitleaks` grün).
+- [x] `pnpm check` lokal grün; `pnpm e2e` grün; DB-Guardrails grün (`pnpm db:test:local`).
+- [ ] CI auf GitHub grün (alle 4 Jobs), inklusive `supabase test db` gegen das echte Supabase-Image.
+- [x] Hartkodierter JSX-Text und Import `modules/alpha → modules/beta` lassen den Lint fehlschlagen (geprüft und
+      entfernt; dauerhaft abgesichert durch `tests/lint/`).
+- [x] Eine Migration mit Tabelle ohne RLS, `FOR ALL`-Policy, Definer-View und Definer-Funktion ohne `search_path`
+      lässt die Guardrails fehlschlagen (7 von 17 rot), ebenso eine Baseline ohne Default-Privilege-Härtung
+      (5 rot); eine regelkonforme Mandantentabelle besteht (geprüft und entfernt).
+- [x] Fehlendes `VITE_SUPABASE_URL` → Build bricht mit `VITE_SUPABASE_URL is missing (see .env.example)` ab;
+      zur Laufzeit erscheint die Konfigurationsfehlerseite.
+- [x] Keine Secrets im Repo (gitleaks lokal über Arbeitsbaum und Historie grün).
 
 ---
 

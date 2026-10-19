@@ -1,0 +1,59 @@
+/*
+ * TeamPanel design tokens (spec §48). Components use semantic tokens only — never raw colors.
+ * Organization branding (Pro) may override --brand, never contrast-critical tokens.
+ * Fonts: system stack only; no third-party font CDN (privacy, CSP).
+ */
+:root {
+  --font-family-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius: 0.75rem;
+
+  --background: oklch(0.985 0.003 247);
+  --foreground: oklch(0.21 0.02 257);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 257);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 257);
+  --primary: oklch(0.47 0.11 236);
+  --primary-foreground: oklch(0.985 0.003 247);
+  --secondary: oklch(0.95 0.01 247);
+  --secondary-foreground: oklch(0.27 0.03 257);
+  --muted: oklch(0.955 0.008 247);
+  --muted-foreground: oklch(0.49 0.025 257);
+  --accent: oklch(0.94 0.02 236);
+  --accent-foreground: oklch(0.27 0.03 257);
+  --destructive: oklch(0.55 0.2 27);
+  --destructive-foreground: oklch(0.985 0.003 247);
+  --success: oklch(0.55 0.13 152);
+  --warning: oklch(0.75 0.15 75);
+  --border: oklch(0.91 0.01 247);
+  --input: oklch(0.91 0.01 247);
+  --ring: oklch(0.47 0.11 236);
+  --brand: var(--primary);
+}
+
+/* Prepared for a later dark mode (spec §48: "Dark Mode später oder optional"); not enabled in V1. */
+.dark {
+  --background: oklch(0.17 0.015 257);
+  --foreground: oklch(0.96 0.005 247);
+  --card: oklch(0.21 0.02 257);
+  --card-foreground: oklch(0.96 0.005 247);
+  --popover: oklch(0.21 0.02 257);
+  --popover-foreground: oklch(0.96 0.005 247);
+  --primary: oklch(0.7 0.11 236);
+  --primary-foreground: oklch(0.17 0.015 257);
+  --secondary: oklch(0.27 0.02 257);
+  --secondary-foreground: oklch(0.96 0.005 247);
+  --muted: oklch(0.27 0.02 257);
+  --muted-foreground: oklch(0.71 0.02 257);
+  --accent: oklch(0.3 0.03 236);
+  --accent-foreground: oklch(0.96 0.005 247);
+  --destructive: oklch(0.65 0.19 25);
+  --destructive-foreground: oklch(0.17 0.015 257);
+  --success: oklch(0.68 0.13 152);
+  --warning: oklch(0.8 0.14 75);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.7 0.11 236);
+}
