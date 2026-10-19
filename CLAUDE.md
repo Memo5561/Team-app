@@ -10,7 +10,8 @@ Modulares Team-Management-SaaS für KMU (AT/EU). Responsive Web-App/PWA. **Keine
 
 ## Aktueller Stand
 - Alle Empfehlungen in `entscheidungen-und-risiken.md` sind vom Product Owner freigegeben (2026-10-19).
-- **Phase 0 (Repository-Fundament) ist abgeschlossen**, inkl. Staging (`https://teampanel-8i0.pages.dev`, Supabase `teampanel-staging`). Nächste Phase: 1 (Auth). Details: `docs/roadmap.md`, Umgebungen: `docs/architecture/umgebungen.md` §3.
+- **Phase 0 (Repository-Fundament) ist abgeschlossen**, inkl. Staging (`https://teampanel-8i0.pages.dev`, Supabase `teampanel-staging`).
+- **Phase 1 (Auth) ist umgesetzt**, CI grün; offen ist die Abnahme auf Staging (Deploy database, Auth-Einstellungen nach `docs/architecture/umgebungen.md` §2.4, Handy-Test). Registrierung nur per E-Mail-Link, Passwort optional danach (E-43, E-46). Details: `docs/roadmap.md`, Umgebungen: `docs/architecture/umgebungen.md` §3.
 - `main` ist geschützt: Arbeit auf eigenem Branch, Übernahme nur per Pull Request mit grüner CI. Migrationen nach Staging nur über den Workflow *Deploy database*, nie direkt per Supabase-Connector.
 
 ## Befehle
