@@ -31,7 +31,7 @@
     "supabase:env": "node scripts/supabase-env.mjs"
   },
   "dependencies": {
-    "@hookform/resolvers": "5.9.2",
+    "@hookform/resolvers": "6.0.0",
     "@radix-ui/react-slot": "1.5.0",
     "@supabase/supabase-js": "2.118.0",
     "@tanstack/react-query": "5.104.4",
